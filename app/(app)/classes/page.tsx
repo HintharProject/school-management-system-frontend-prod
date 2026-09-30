@@ -635,25 +635,46 @@ export default function ClassesPage() {
 
       <ConfirmDialog
         open={deleteConfirmClass !== null}
-        title="Confirm Delete"
+        title="Permanently Delete Class & All Records"
         description={
           deleteConfirmClass
-            ? `Are you sure you want to delete ${formatClassLabel(deleteConfirmClass)}? This action cannot be undone.`
+            ? `Are you sure you want to delete ${formatClassLabel(deleteConfirmClass)}? This will permanently wipe this class and all associated data.`
             : ""
         }
+        checkboxLabel="I understand that this will permanently delete this class, all timetable slots, scheduled and completed sessions, and attendance logs."
+        confirmLabel="Delete Everything"
         onConfirm={() => deleteConfirmClass && handleDelete(deleteConfirmClass)}
         onCancel={() => setDeleteConfirmClass(null)}
         loading={deleteSubmitting}
-      />
+      >
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
+          <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
+          <ul className="mt-1 list-disc pl-4 space-y-0.5 text-muted-foreground">
+            <li>All timetable slots scheduled for this class</li>
+            <li>All sessions (scheduled, completed, and cancelled)</li>
+            <li>All student lesson attendance records</li>
+            <li>All student roster enrollments</li>
+          </ul>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={bulkConfirmOpen}
-        title="Delete Multiple Classes"
-        description={`Are you sure you want to delete ${selectedIds.length} selected class(es)? This action cannot be undone.`}
+        title="Permanently Delete Multiple Classes & All Records"
+        description={`Are you sure you want to delete ${selectedIds.length} selected class(es)? This action will permanently remove all associated schedules and records.`}
+        checkboxLabel={`I understand that this will permanently delete ${selectedIds.length} class(es), their timetable slots, all past and future sessions, and attendance logs.`}
+        confirmLabel="Delete Everything"
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkConfirmOpen(false)}
         loading={bulkDeleting}
-      />
+      >
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
+          <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
+          <p className="mt-1 text-muted-foreground">
+            Deleting {selectedIds.length} class(es) will permanently cascade delete all timetable slots, scheduled/completed sessions, student rosters, and attendance records for all selected classes.
+          </p>
+        </div>
+      </ConfirmDialog>
     </StaggerContainer>
   )
 }
