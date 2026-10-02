@@ -553,6 +553,22 @@ export function createApi(token: string) {
         body: JSON.stringify({ ids }),
       }),
 
+    // --- Student Subject Enrollments (Cross-Enrollment) ---
+    listStudentSubjectEnrollments: (params?: Record<string, string | number | undefined | null>) =>
+      fetchAllPages<import("./types").StudentSubjectEnrollment>(`/student-subject-enrollments/`, token, params),
+
+    listStudentSubjectEnrollmentsPage: (params?: Record<string, string | number | undefined | null>) =>
+      fetchPage<import("./types").StudentSubjectEnrollment>(`/student-subject-enrollments/`, token, params),
+
+    createStudentSubjectEnrollment: (classObjId: number, studentId: number, subjectId: number) =>
+      request<import("./types").StudentSubjectEnrollment>(`/student-subject-enrollments/`, token, {
+        method: "POST",
+        body: JSON.stringify({ class_obj_id: classObjId, student_id: studentId, subject_id: subjectId }),
+      }),
+
+    deleteStudentSubjectEnrollment: (id: number) =>
+      request<void>(`/student-subject-enrollments/${id}/`, token, { method: "DELETE" }),
+
     // --- Subjects ---
     listSubjects: (params?: Record<string, string | number | undefined | null>, forceRefresh = false) =>
       cachedRequest<import("./types").Subject[]>(`/subjects/${buildQueryString(params)}`, token, {}, DEFAULT_TTL_MS, forceRefresh),

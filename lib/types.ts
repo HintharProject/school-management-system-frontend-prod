@@ -459,6 +459,18 @@ export interface ClassStudent {
   class_obj_id?: number
 }
 
+// --- StudentSubjectEnrollment ---
+
+export interface StudentSubjectEnrollment {
+  id: number
+  student: Student | number | any
+  class_obj: Class | number | any
+  subject: Subject | number | any
+  student_id?: number
+  class_obj_id?: number
+  subject_id?: number
+}
+
 // --- Session Attendance & Ad-Hoc Sessions ---
 
 export interface SessionAttendance {

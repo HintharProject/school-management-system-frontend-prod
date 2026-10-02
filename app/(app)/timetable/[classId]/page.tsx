@@ -75,6 +75,10 @@ export default function TimetableClassPage() {
   const [modal, setModal] = useState<ModalState | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  const deleteSlot = useMemo(
+    () => lessons.find((l) => l.id === deleteConfirmId) ?? null,
+    [lessons, deleteConfirmId]
+  )
 
   // Clear notifications
   useEffect(() => {
@@ -721,12 +725,26 @@ export default function TimetableClassPage() {
 
       <ConfirmDialog
         open={deleteConfirmId !== null}
-        title="Confirm Delete"
-        description="Are you sure you want to delete this timetable slot? This action cannot be undone."
+        title="Permanently Delete Timetable Slot & All Records"
+        description={
+          deleteSlot
+            ? `Are you sure you want to delete the ${deleteSlot.subject.name} slot on ${DAYS[deleteSlot.day_of_week]} (${deleteSlot.start_time.substring(0, 5)} – ${deleteSlot.end_time.substring(0, 5)})? This will permanently wipe this timetable slot and all associated sessions.`
+            : "Are you sure you want to delete this timetable slot? This will permanently wipe this timetable slot and all associated sessions."
+        }
+        checkboxLabel="I understand that this will permanently delete this timetable slot, all scheduled and completed sessions, and attendance logs."
+        confirmLabel="Delete Everything"
         onConfirm={() => deleteConfirmId && handleDelete(deleteConfirmId)}
         onCancel={() => setDeleteConfirmId(null)}
         loading={deleteSubmitting}
-      />
+      >
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
+          <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
+          <ul className="mt-1 list-disc pl-4 space-y-0.5 text-muted-foreground">
+            <li>All sessions (scheduled, completed, and cancelled) generated from this slot</li>
+            <li>All student lesson attendance records for these sessions</li>
+          </ul>
+        </div>
+      </ConfirmDialog>
     </StaggerContainer>
   )
 }

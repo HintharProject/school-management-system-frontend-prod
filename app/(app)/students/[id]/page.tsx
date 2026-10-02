@@ -7,6 +7,7 @@ import { useAuth } from "@clerk/nextjs"
 import {
   ArrowLeft,
   BookOpen,
+  GraduationCap,
   Loader2,
   Monitor,
   Pencil,
@@ -18,6 +19,7 @@ import {
   User,
 } from "lucide-react"
 import { createApi, ApiError } from "@/lib/api"
+import { Badge } from "@/components/ui/badge"
 import { useClassesQuery } from "@/hooks/use-api-queries"
 import { formatClassLabel } from "@/lib/format-class"
 import {
@@ -77,6 +79,14 @@ async function mergeClassTimetables(
   return [...byId.values()]
 }
 
+interface CrossEnrollmentItem {
+  id: string
+  classId: number
+  classLabel: string
+  subjectId: number
+  subjectName: string
+}
+
 function StudentDetailContent() {
   const params = useParams()
   const router = useRouter()
@@ -112,6 +122,15 @@ function StudentDetailContent() {
   const [enrolling, setEnrolling] = React.useState(false)
   const [unenrollingId, setUnenrollingId] = React.useState<number | null>(null)
 
+  // Cross-enrollment UI state (with browser persistence)
+  const [crossEnrollments, setCrossEnrollments] = React.useState<CrossEnrollmentItem[]>([])
+  const [crossClassId, setCrossClassId] = React.useState("")
+  const [crossSubjectId, setCrossSubjectId] = React.useState("")
+  const [crossAvailableSubjects, setCrossAvailableSubjects] = React.useState<{ value: string; label: string }[]>([])
+  const [loadingSubjectsForClass, setLoadingSubjectsForClass] = React.useState(false)
+  const [crossEnrolling, setCrossEnrolling] = React.useState(false)
+  const [removingCrossId, setRemovingCrossId] = React.useState<string | null>(null)
+
   const [qrLoading, setQrLoading] = React.useState(false)
   const [tokenLoading, setTokenLoading] = React.useState(false)
 
@@ -129,12 +148,29 @@ function StudentDetailContent() {
       if (!token) throw new Error("No auth token available")
       const api = createApi(token)
       if (isStaff) {
-        const [studentRes, enrollmentRes] = await Promise.all([
+        const [studentRes, enrollmentRes, crossRes] = await Promise.all([
           api.getStudent(studentId),
           api.listClassStudentsPage({ student_id: studentId, page_size: 200 }),
+          api.listStudentSubjectEnrollmentsPage({ student_id: studentId, page_size: 200 }).catch(() => ({ results: [] })),
         ])
         setStudent(studentRes)
         setEnrollments(enrollmentRes.results)
+        setCrossEnrollments(
+          crossRes.results.map((e) => {
+            const cls =
+              typeof e.class_obj === "object" && e.class_obj
+                ? (e.class_obj as Class)
+                : allClasses.find((c) => c.id === e.class_obj_id)
+            const subj = typeof e.subject === "object" && e.subject ? (e.subject as any) : null
+            return {
+              id: String(e.id),
+              classId: cls ? cls.id : (e.class_obj_id ?? 0),
+              classLabel: cls ? formatClassLabel(cls) : `Class #${e.class_obj_id ?? "?"}`,
+              subjectId: subj ? subj.id : (e.subject_id ?? 0),
+              subjectName: subj ? subj.name : `Subject #${e.subject_id ?? "?"}`,
+            }
+          })
+        )
         const classIds = [
           ...new Set(
             enrollmentRes.results
@@ -146,11 +182,70 @@ function StudentDetailContent() {
               .filter((id) => id > 0)
           ),
         ]
-        setSlots(await mergeClassTimetables(api, classIds))
+        const cohortSlots = await mergeClassTimetables(api, classIds)
+
+        // Also fetch timetable slots for cross-enrolled subjects
+        const crossClassIds = [
+          ...new Set(
+            crossRes.results
+              .map((e) =>
+                typeof e.class_obj === "object" && e.class_obj
+                  ? e.class_obj.id
+                  : e.class_obj_id ?? 0
+              )
+              .filter((id) => id > 0)
+          ),
+        ]
+        let crossSlots: TimetableSlot[] = []
+        if (crossClassIds.length > 0) {
+          const crossTimetables = await Promise.all(
+            crossClassIds.map((id) => api.getClassTimetable(id).catch(() => []))
+          )
+          const crossPairs = new Set(
+            crossRes.results.map((e) => {
+              const cId =
+                typeof e.class_obj === "object" && e.class_obj
+                  ? e.class_obj.id
+                  : e.class_obj_id
+              const sId =
+                typeof e.subject === "object" && e.subject ? e.subject.id : e.subject_id
+              return `${cId}-${sId}`
+            })
+          )
+          for (const list of crossTimetables) {
+            for (const s of list) {
+              if (crossPairs.has(`${s.class_obj?.id}-${s.subject?.id}`)) {
+                crossSlots.push(s)
+              }
+            }
+          }
+        }
+        const byId = new Map<number, TimetableSlot>()
+        for (const s of [...cohortSlots, ...crossSlots]) byId.set(s.id, s)
+        setSlots([...byId.values()])
       } else {
-        const studentRes = await api.getStudent(studentId)
+        const [studentRes, crossRes] = await Promise.all([
+          api.getStudent(studentId),
+          api.listStudentSubjectEnrollmentsPage({ student_id: studentId, page_size: 200 }).catch(() => ({ results: [] })),
+        ])
         setStudent(studentRes)
         setEnrollments([])
+        setCrossEnrollments(
+          crossRes.results.map((e) => {
+            const cls =
+              typeof e.class_obj === "object" && e.class_obj
+                ? (e.class_obj as Class)
+                : null
+            const subj = typeof e.subject === "object" && e.subject ? (e.subject as any) : null
+            return {
+              id: String(e.id),
+              classId: cls ? cls.id : (e.class_obj_id ?? 0),
+              classLabel: cls ? formatClassLabel(cls) : `Class #${e.class_obj_id ?? "?"}`,
+              subjectId: subj ? subj.id : (e.subject_id ?? 0),
+              subjectName: subj ? subj.name : `Subject #${e.subject_id ?? "?"}`,
+            }
+          })
+        )
         setSlots(await mergeClassTimetables(api, studentRes.class_ids ?? []))
       }
     } catch (err) {
@@ -159,7 +254,7 @@ function StudentDetailContent() {
     } finally {
       setLoading(false)
     }
-  }, [getToken, isSignedIn, studentId, isStaff])
+  }, [getToken, isSignedIn, studentId, isStaff, allClasses])
 
   const loadSummary = React.useCallback(async () => {
     if (!isSignedIn || !Number.isFinite(studentId)) return
@@ -275,6 +370,136 @@ function StudentDetailContent() {
       else setError(err instanceof Error ? err.message : "Failed to unenroll")
     } finally {
       setUnenrollingId(null)
+    }
+  }
+
+  // Dynamically load subjects taught in the selected cross-enrolled class
+  React.useEffect(() => {
+    if (!crossClassId) {
+      setCrossAvailableSubjects([])
+      setCrossSubjectId("")
+      return
+    }
+    let cancelled = false
+    async function loadSubjectsForClass() {
+      setLoadingSubjectsForClass(true)
+      try {
+        const token = await getToken()
+        if (!token) return
+        const api = createApi(token)
+        const [timetable, allSubjs] = await Promise.all([
+          api.getClassTimetable(Number(crossClassId)).catch(() => []),
+          api.listSubjects({ summary: "true" }).catch(() => []),
+        ])
+        if (cancelled) return
+        const timetableSubjects = new Map<number, string>()
+        for (const slot of timetable) {
+          if (slot.subject && slot.subject.id) {
+            timetableSubjects.set(slot.subject.id, slot.subject.name)
+          }
+        }
+        if (timetableSubjects.size > 0) {
+          setCrossAvailableSubjects(
+            Array.from(timetableSubjects.entries()).map(([id, name]) => ({
+              value: String(id),
+              label: name,
+            }))
+          )
+        } else {
+          setCrossAvailableSubjects(
+            allSubjs.map((s) => ({
+              value: String(s.id),
+              label: s.name,
+            }))
+          )
+        }
+      } catch {
+        if (!cancelled) setCrossAvailableSubjects([])
+      } finally {
+        if (!cancelled) setLoadingSubjectsForClass(false)
+      }
+    }
+    void loadSubjectsForClass()
+    return () => {
+      cancelled = true
+    }
+  }, [crossClassId, getToken])
+
+  const handleAddCrossEnrollment = async () => {
+    if (!crossClassId || !crossSubjectId || !student) return
+    const cls = allClasses.find((c) => c.id === Number(crossClassId))
+    const subj = crossAvailableSubjects.find((s) => s.value === crossSubjectId)
+    if (!cls || !subj) return
+
+    setCrossEnrolling(true)
+    setError(null)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error("No auth token available")
+      const api = createApi(token)
+      const res = await api.createStudentSubjectEnrollment(cls.id, student.id, Number(subj.value))
+
+      const newItem: CrossEnrollmentItem = {
+        id: String(res.id),
+        classId: cls.id,
+        classLabel: formatClassLabel(cls),
+        subjectId: Number(subj.value),
+        subjectName: subj.label,
+      }
+      setCrossEnrollments((prev) => [...prev, newItem])
+
+      // Merge matching timetable slot(s) for visual schedule preview
+      const added = await api.getClassTimetable(cls.id, true).catch(() => [])
+      const relevantSlots = added.filter(
+        (s) => s.subject?.id === Number(subj.value)
+      )
+      if (relevantSlots.length > 0) {
+        setSlots((prev) => {
+          const byId = new Map(prev.map((slot) => [slot.id, slot]))
+          for (const slot of relevantSlots) byId.set(slot.id, slot)
+          return [...byId.values()]
+        })
+      }
+
+      setCrossSubjectId("")
+      flashSuccess(`Cross-enrolled into ${subj.label} (${formatClassLabel(cls)}).`)
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.userMessage)
+      else setError(err instanceof Error ? err.message : "Failed to cross-enroll")
+    } finally {
+      setCrossEnrolling(false)
+    }
+  }
+
+  const handleRemoveCrossEnrollment = async (id: string) => {
+    setRemovingCrossId(id)
+    setError(null)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error("No auth token available")
+      const numId = Number(id)
+      if (Number.isFinite(numId) && numId > 0) {
+        await createApi(token).deleteStudentSubjectEnrollment(numId)
+      }
+      const target = crossEnrollments.find((item) => item.id === id)
+      setCrossEnrollments((prev) => prev.filter((item) => item.id !== id))
+      if (target) {
+        setSlots((prev) =>
+          prev.filter(
+            (slot) =>
+              !(
+                slot.class_obj?.id === target.classId &&
+                slot.subject?.id === target.subjectId
+              )
+          )
+        )
+      }
+      flashSuccess("Cross-enrollment removed.")
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.userMessage)
+      else setError(err instanceof Error ? err.message : "Failed to remove cross-enrollment")
+    } finally {
+      setRemovingCrossId(null)
     }
   }
 
@@ -587,6 +812,162 @@ function StudentDetailContent() {
           ) : (
             <StudentClassLabelsCard labels={student.class_labels ?? []} />
           )}
+
+          {isStaff ? (
+            <Card className="border-border/80">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <GraduationCap className="size-5 text-muted-foreground" />
+                      Cross-Enrolled Subjects
+                    </CardTitle>
+                    <CardDescription>
+                      Specific subjects this student attends in another class or cohort.
+                    </CardDescription>
+                  </div>
+                  {crossEnrollments.length > 0 && (
+                    <Badge variant="outline" className="text-xs font-semibold">
+                      {crossEnrollments.length} {crossEnrollments.length === 1 ? "Subject" : "Subjects"}
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {crossEnrollments.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/70 p-4 text-center">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      No cross-enrolled subjects yet.
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground/75">
+                      Use the selectors below to enroll this student into individual subjects from other cohorts.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y rounded-xl border">
+                    {crossEnrollments.map((entry) => (
+                      <li key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground text-sm">
+                              {entry.subjectName}
+                            </span>
+                            <Badge variant="secondary" className="text-[11px] font-medium px-2 py-0">
+                              {entry.classLabel}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Attending with cohort{" "}
+                            <Link
+                              href={`/classes/${entry.classId}/`}
+                              className="font-medium text-foreground hover:underline"
+                            >
+                              {entry.classLabel}
+                            </Link>
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          disabled={removingCrossId === entry.id}
+                          onClick={() => handleRemoveCrossEnrollment(entry.id)}
+                          aria-label={`Remove ${entry.subjectName} from ${entry.classLabel}`}
+                        >
+                          {removingCrossId === entry.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] items-end pt-1">
+                  <div className="min-w-0">
+                    <label className="mb-1.5 block text-xs text-muted-foreground">
+                      Host Cohort / Class
+                    </label>
+                    <SearchableSelect
+                      options={allClasses.map((c) => ({
+                        value: String(c.id),
+                        label: formatClassLabel(c),
+                      }))}
+                      value={crossClassId}
+                      onValueChange={(val) => {
+                        setCrossClassId(val)
+                        setCrossSubjectId("")
+                      }}
+                      placeholder="Select class…"
+                      searchPlaceholder="Search classes…"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <label className="mb-1.5 block text-xs text-muted-foreground">
+                      Subject
+                    </label>
+                    <SearchableSelect
+                      options={crossAvailableSubjects}
+                      value={crossSubjectId}
+                      onValueChange={setCrossSubjectId}
+                      placeholder={
+                        !crossClassId
+                          ? "First pick a class"
+                          : loadingSubjectsForClass
+                          ? "Loading subjects…"
+                          : crossAvailableSubjects.length === 0
+                          ? "No subjects in class"
+                          : "Select subject…"
+                      }
+                      searchPlaceholder="Search subjects…"
+                      disabled={!crossClassId || loadingSubjectsForClass || crossAvailableSubjects.length === 0}
+                    />
+                  </div>
+
+                  <Button
+                    className="shrink-0 gap-1.5"
+                    disabled={!crossClassId || !crossSubjectId || crossEnrolling}
+                    onClick={() => void handleAddCrossEnrollment()}
+                  >
+                    {crossEnrolling ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    Cross-Enroll
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : crossEnrollments.length > 0 ? (
+            <Card className="border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <GraduationCap className="size-5 text-muted-foreground" />
+                  Cross-Enrolled Subjects
+                </CardTitle>
+                <CardDescription>
+                  Additional subjects this student attends in another cohort.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y rounded-xl border">
+                  {crossEnrollments.map((entry) => (
+                    <li key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div>
+                        <p className="font-semibold text-sm">{entry.subjectName}</p>
+                        <p className="text-xs text-muted-foreground">Cohort: {entry.classLabel}</p>
+                      </div>
+                      <Badge variant="secondary">{entry.classLabel}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <StudentAttendanceOverview
             summary={summary}
