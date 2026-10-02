@@ -144,7 +144,7 @@ export default function SubjectsPage() {
   const [saving, setSaving] = React.useState(false)
 
   // Delete confirmation
-  const [deletingId, setDeletingId] = React.useState<number | null>(null)
+  const [deleteConfirmSubject, setDeleteConfirmSubject] = React.useState<Subject | null>(null)
   const [deleting, setDeleting] = React.useState(false)
 
   // Auto-dismiss success message
@@ -257,16 +257,15 @@ export default function SubjectsPage() {
     [getApi, editingSubject, queryClient],
   )
 
-  const handleDelete = React.useCallback(async () => {
-    if (deletingId === null) return
+  const handleDelete = React.useCallback(async (subject: Subject) => {
     setDeleting(true)
     setError(null)
     try {
       const api = await getApi()
-      await api.deleteSubject(deletingId)
-      setSuccess("Subject deleted successfully.")
-      setSelectedIds((prev) => prev.filter((id) => id !== deletingId))
-      setDeletingId(null)
+      await api.deleteSubject(subject.id)
+      setSuccess(`Subject "${subject.name}" and all associated records deleted successfully.`)
+      setSelectedIds((prev) => prev.filter((id) => id !== subject.id))
+      setDeleteConfirmSubject(null)
       await queryClient.invalidateQueries({ queryKey: apiQueryKeys.subjects() })
     } catch (err) {
       if (err instanceof ApiError) {
@@ -277,7 +276,7 @@ export default function SubjectsPage() {
     } finally {
       setDeleting(false)
     }
-  }, [getApi, deletingId, queryClient])
+  }, [getApi, queryClient])
 
   const openCreateModal = () => {
     setEditingSubject(null)
@@ -501,11 +500,11 @@ export default function SubjectsPage() {
                       >
                         <Pencil className="size-4" />
                       </Button>
-                      <Button
+                        <Button
                         variant="ghost"
                         size="icon-sm"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => setDeletingId(subject.id)}
+                        onClick={() => setDeleteConfirmSubject(subject)}
                         aria-label={`Delete ${subject.name}`}
                       >
                         <Trash2 className="size-4" />
@@ -547,27 +546,48 @@ export default function SubjectsPage() {
 
       {/* Single delete confirmation */}
       <ConfirmDialog
-        open={deletingId !== null}
-        title="Delete Subject"
+        open={deleteConfirmSubject !== null}
+        title="Permanently Delete Subject & All Records"
         description={
-          deletingId !== null
-            ? `Are you sure you want to delete subject #${deletingId}? This action cannot be undone.`
+          deleteConfirmSubject
+            ? `Are you sure you want to delete ${deleteConfirmSubject.name}? This will permanently wipe this subject and all associated data.`
             : ""
         }
-        onConfirm={handleDelete}
-        onCancel={() => setDeletingId(null)}
+        checkboxLabel="I understand that this will permanently delete this subject, all timetable slots, scheduled and completed sessions, and attendance logs."
+        confirmLabel="Delete Everything"
+        onConfirm={() => deleteConfirmSubject && handleDelete(deleteConfirmSubject)}
+        onCancel={() => setDeleteConfirmSubject(null)}
         loading={deleting}
-      />
+      >
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
+          <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
+          <ul className="mt-1 list-disc pl-4 space-y-0.5 text-muted-foreground">
+            <li>All timetable slots scheduled for this subject</li>
+            <li>All sessions (scheduled, completed, and cancelled)</li>
+            <li>All student lesson attendance records</li>
+            <li>All ad-hoc tutoring sessions for this subject</li>
+          </ul>
+        </div>
+      </ConfirmDialog>
 
       {/* Bulk delete confirmation */}
       <ConfirmDialog
         open={bulkConfirmOpen}
-        title="Delete Multiple Subjects"
-        description={`Are you sure you want to delete ${selectedIds.length} selected subject(s)? This action cannot be undone.`}
+        title="Permanently Delete Multiple Subjects & All Records"
+        description={`Are you sure you want to delete ${selectedIds.length} selected subject(s)? This action will permanently remove all associated schedules and records.`}
+        checkboxLabel={`I understand that this will permanently delete ${selectedIds.length} subject(s), their timetable slots, all past and future sessions, and attendance logs.`}
+        confirmLabel="Delete Everything"
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkConfirmOpen(false)}
         loading={bulkDeleting}
-      />
+      >
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
+          <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
+          <p className="mt-1 text-muted-foreground">
+            Deleting {selectedIds.length} subject(s) will permanently cascade delete all associated timetable slots, scheduled/completed sessions, and attendance records for all selected subjects.
+          </p>
+        </div>
+      </ConfirmDialog>
     </StaggerContainer>
   )
 }
