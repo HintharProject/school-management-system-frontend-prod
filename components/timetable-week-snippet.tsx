@@ -1,7 +1,9 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import type { TimetableSlot } from "@/lib/types"
+import { AlertTriangle } from "lucide-react"
+import type { TimetableConflictItem, TimetableSlot } from "@/lib/types"
 import { formatClassLabel } from "@/lib/format-class"
 import { cn, formatSlotClock } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -16,6 +18,8 @@ type TimetableWeekSnippetProps = {
   /** Staff editor — omit on student/teacher hubs (read-only). */
   editorHref?: string
   slotLine?: TimetableSlotLine
+  conflicts?: TimetableConflictItem[]
+  conflictingSlotIds?: number[]
 }
 
 function slotSecondary(slot: TimetableSlot, line: TimetableSlotLine): string | null {
@@ -34,7 +38,13 @@ export function TimetableWeekSnippet({
   className,
   editorHref,
   slotLine = "teacher",
+  conflicts,
+  conflictingSlotIds,
 }: TimetableWeekSnippetProps) {
+  const conflictSet = React.useMemo(
+    () => new Set(conflictingSlotIds ?? []),
+    [conflictingSlotIds]
+  )
   const byDay = DAYS.map((_, day) =>
     slots
       .filter((slot) => slot.day_of_week === day)
@@ -60,13 +70,27 @@ export function TimetableWeekSnippet({
                   ) : (
                     byDay[index].map((slot) => {
                       const secondary = slotSecondary(slot, slotLine)
+                      const isConflicting = conflictSet.has(slot.id)
                       return (
                         <div
                           key={slot.id}
-                          className="rounded-md border border-primary/20 bg-primary/10 px-1.5 py-1"
+                          className={cn(
+                            "rounded-md border px-1.5 py-1",
+                            isConflicting
+                              ? "border-amber-500/50 bg-amber-500/10"
+                              : "border-primary/20 bg-primary/10"
+                          )}
                         >
+                          {isConflicting ? (
+                            <div className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                              <AlertTriangle className="size-3 shrink-0" />
+                              <span>Conflict</span>
+                            </div>
+                          ) : null}
                           <p className="truncate text-[11px] font-semibold leading-tight text-foreground">
-                            {slot.subject.name}
+                            {slot.cohort_identifier
+                              ? `${slot.cohort_identifier} — ${slot.subject.name}`
+                              : slot.subject.name}
                           </p>
                           <p className="truncate text-[10px] text-muted-foreground">
                             {formatSlotClock(slot.start_time)}–{formatSlotClock(slot.end_time)}

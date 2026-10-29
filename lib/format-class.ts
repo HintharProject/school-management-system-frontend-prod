@@ -1,17 +1,17 @@
 import type { Class, EducationLevel } from "@/lib/types"
 import { EDUCATION_LEVELS } from "@/lib/types"
 
-/** Max lengths — keep in sync with Django `Class` model fields. */
+/** Max lengths — keep in sync with Django `Class` / `Cohort` model fields. */
 export const COHORT_IDENTIFIER_MAX_LENGTH = 1
 export const COHORT_SUB_CATEGORY_MAX_LENGTH = 10
 
-export const COHORT_IDENTIFIER_PLACEHOLDER = "e.g. A, K"
-export const COHORT_SUB_CATEGORY_PLACEHOLDER = "e.g. 2, 2A, 2B, 4"
+export const COHORT_IDENTIFIER_PLACEHOLDER = "e.g. K, A, B"
+export const COHORT_SUB_CATEGORY_PLACEHOLDER = "e.g. 1, 2"
 
 export const COHORT_IDENTIFIER_HINT =
-  "One letter only (e.g. A for Year 6 A, K for IGCSE K-stream)."
+  "Cohort letter only (e.g. K, A, B)."
 export const COHORT_SUB_CATEGORY_HINT =
-  "Letters and numbers — combines with the identifier (K + 2 → K2, K + 2A → K2A, K + 4 → K4)."
+  "Optional Sub-Cohort Category number (e.g. 1, 2 — combines into Cohort Identifier like IG K1 or IAL K2)."
 
 /** Strip non-letters and keep a single uppercase character. */
 export function sanitizeCohortIdentifierInput(value: string): string {
@@ -26,7 +26,7 @@ export function sanitizeCohortSubCategoryInput(value: string): string {
     .slice(0, COHORT_SUB_CATEGORY_MAX_LENGTH)
 }
 
-/** Concatenate cohort identifier + optional sub-category (e.g. K + 2 → K2, K + 2A → K2A). */
+/** Concatenate cohort letter + optional sub-cohort category (e.g. K + 1 → K1, K + 2 → K2). */
 export function formatClassStream(
   cohortIdentifier: string,
   cohortSubCategory?: string | null
@@ -34,7 +34,35 @@ export function formatClassStream(
   return `${cohortIdentifier ?? ""}${cohortSubCategory ?? ""}`.trim()
 }
 
-/** Human-readable class name, e.g. "Year 6 · A", "IGCSE · K2", or "IGCSE · K2A". */
+/**
+ * Explicit Cohort Identifier string: e.g. "IG K1", "IAL K2", "Year6 A".
+ */
+export function formatCohortIdentifier(
+  cls: Pick<Class, "education_level" | "cohort_identifier"> & {
+    cohort_sub_category?: string | null
+    full_cohort_identifier?: string | null
+  }
+): string {
+  if (cls.full_cohort_identifier) return cls.full_cohort_identifier
+  const stream = formatClassStream(cls.cohort_identifier, cls.cohort_sub_category)
+  return stream ? `${cls.education_level} ${stream}` : cls.education_level
+}
+
+/**
+ * Explicit Course label: Cohort Identifier + Subject name, e.g. "IG K1 — Mathematics".
+ */
+export function formatCourseLabel(
+  cls: (Pick<Class, "education_level" | "cohort_identifier"> & {
+    cohort_sub_category?: string | null
+    full_cohort_identifier?: string | null
+  }) | string,
+  subjectName: string
+): string {
+  const cohortId = typeof cls === "string" ? cls : formatCohortIdentifier(cls)
+  return cohortId ? `${cohortId} — ${subjectName}` : subjectName
+}
+
+/** Human-readable cohort label, e.g. "Year 6 · A", "IGCSE · K1", or "IAL (A Level) · K2". */
 export function formatClassLabel(
   cls: Pick<Class, "education_level" | "cohort_identifier"> & {
     cohort_sub_category?: string | null
