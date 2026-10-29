@@ -10,6 +10,7 @@ import { apiQueryKeys, useClassesQuery } from "@/hooks/use-api-queries"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   formatClassLabel,
+  formatCohortIdentifier,
   COHORT_IDENTIFIER_MAX_LENGTH,
   COHORT_SUB_CATEGORY_MAX_LENGTH,
   COHORT_IDENTIFIER_PLACEHOLDER,
@@ -148,10 +149,10 @@ export default function ClassesPage() {
 
       if (editingClass) {
         await api.updateClass(editingClass.id, payload)
-        setSuccessMessage(`Class "${formatClassLabel(payload)}" updated successfully.`)
+        setSuccessMessage(`Cohort "${formatCohortIdentifier(payload)}" updated successfully.`)
       } else {
         await api.createClass(payload)
-        setSuccessMessage(`Class "${formatClassLabel(payload)}" created successfully.`)
+        setSuccessMessage(`Cohort "${formatCohortIdentifier(payload)}" created successfully.`)
       }
 
       closeModal()
@@ -177,7 +178,7 @@ export default function ClassesPage() {
       if (!token) throw new Error("No auth token available")
       const api = createApi(token)
       await api.deleteClass(cls.id)
-      setSuccessMessage("Class deleted successfully.")
+      setSuccessMessage("Cohort deleted successfully.")
       setSelectedIds((prev) => prev.filter((item) => item !== cls.id))
       setDeleteConfirmClass(null)
       await loadData()
@@ -201,7 +202,7 @@ export default function ClassesPage() {
       if (!token) throw new Error("No auth token available")
       const api = createApi(token)
       const res = await api.bulkDeleteClasses(selectedIds)
-      setSuccessMessage(`Successfully deleted ${res.deleted_count} class(es).`)
+      setSuccessMessage(`Successfully deleted ${res.deleted_count} cohort(s).`)
       setSelectedIds([])
       setBulkConfirmOpen(false)
       await loadData()
@@ -290,10 +291,10 @@ export default function ClassesPage() {
       {/* Standardized Header */}
       <StaggerItem>
         <StandardPageHeader
-          title="Classes"
-          description="Manage education levels and class codes: one-letter identifier (e.g. K) plus optional sub-category (e.g. 2A)."
+          title="Cohorts & Classes"
+          description="Manage Education Levels, Cohort letters (e.g. K, A, B), Sub-Cohort Categories (e.g. 1, 2), and combined Cohort Identifiers (e.g. IG K1, IAL K2)."
           primaryAction={{
-            label: "Add Class",
+            label: "Add Cohort",
             onClick: openAddModal,
             icon: <Plus className="size-4" />,
           }}
@@ -310,7 +311,7 @@ export default function ClassesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-5">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Classes</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Cohorts</p>
               <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <GraduationCap className="size-4" />
               </div>
@@ -353,7 +354,7 @@ export default function ClassesPage() {
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Search classes..."
+                    placeholder="Search cohorts & classes..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
@@ -394,7 +395,7 @@ export default function ClassesPage() {
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="px-3 py-1 text-xs">
                       <GraduationCap className="mr-1.5 size-3.5" />
-                      {classes.length} class{classes.length !== 1 ? "es" : ""}
+                      {classes.length} cohort{classes.length !== 1 ? "s" : ""}
                     </Badge>
                   </div>
                 )}
@@ -431,13 +432,12 @@ export default function ClassesPage() {
                   </TableHead>
 
                   <TableHeadSortable
-                    className="w-[100px]"
-                    sortKey="id"
+                    sortKey="cohort_identifier"
                     currentSortKey={sortConfig.key}
                     currentSortOrder={sortConfig.order}
                     onSort={requestSort}
                   >
-                    ID
+                    Cohort Identifier
                   </TableHeadSortable>
 
                   <TableHeadSortable
@@ -455,7 +455,7 @@ export default function ClassesPage() {
                     currentSortOrder={sortConfig.order}
                     onSort={requestSort}
                   >
-                    Identifier (letter)
+                    Cohort
                   </TableHeadSortable>
 
                   <TableHeadSortable
@@ -464,7 +464,7 @@ export default function ClassesPage() {
                     currentSortOrder={sortConfig.order}
                     onSort={requestSort}
                   >
-                    Sub-category (e.g. 2A)
+                    Sub-Cohort Category
                   </TableHeadSortable>
 
                   <TableHead className="text-right">Actions</TableHead>
@@ -481,9 +481,9 @@ export default function ClassesPage() {
                   <ClassTableSkeletonRows rows={Math.min(pagination.pageSize, 8)} />
                 }
                 idle={lastLoaded === null}
-                idleTitle="No classes loaded yet"
-                idleDescription="Use Load Data in the toolbar to fetch the class list."
-                emptyTitle="No classes found"
+                idleTitle="No cohorts loaded yet"
+                idleDescription="Use Load Data in the toolbar to fetch the cohort list."
+                emptyTitle="No cohorts found"
                 emptyDescription="Try adjusting search or filters, then load again."
               >
                 {pagination.paginatedItems.map((cls) => {
@@ -494,12 +494,21 @@ export default function ClassesPage() {
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleSelectRow(cls.id)}
-                          aria-label={`Select class ${cls.cohort_identifier}`}
+                          aria-label={`Select cohort ${cls.cohort_identifier}`}
                         />
                       </TableCell>
-                      <TableCell className="font-semibold text-foreground">{cls.id}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="font-mono font-bold tracking-tight">
+                            {formatCohortIdentifier(cls)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground font-medium">
+                            {formatClassLabel(cls)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
                           {EDUCATION_LEVELS.find((l) => l.value === cls.education_level)?.label ?? cls.education_level}
                         </Badge>
                       </TableCell>
@@ -513,7 +522,7 @@ export default function ClassesPage() {
                             variant="ghost"
                             size="icon-sm"
                             onClick={() => router.push(`/classes/${cls.id}/`)}
-                            title="Open class hub"
+                            title="Open cohort hub"
                           >
                             <Users className="size-4" />
                           </Button>
@@ -565,11 +574,11 @@ export default function ClassesPage() {
       <Dialog open={modalOpen} onOpenChange={(val) => !val && closeModal()}>
         <DialogContent onClose={closeModal}>
           <DialogHeader>
-            <DialogTitle>{editingClass ? "Edit Class" : "Add Class"}</DialogTitle>
+            <DialogTitle>{editingClass ? "Edit Cohort / Class" : "Add Cohort / Class"}</DialogTitle>
             <DialogDescription>
               {editingClass
-                ? "Update class details below."
-                : "Enter details for the new class cohort."}
+                ? "Update cohort details below."
+                : "Enter details for the new cohort."}
             </DialogDescription>
           </DialogHeader>
 
@@ -581,7 +590,9 @@ export default function ClassesPage() {
                 onValueChange={(val) => setFormEducationLevel(val as ClassPayload["education_level"])}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Education Level" />
+                  <SelectValue placeholder="Select Education Level">
+                    {EDUCATION_LEVELS.find((level) => level.value === formEducationLevel)?.label ?? formEducationLevel}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {EDUCATION_LEVELS.map((level) => (
@@ -594,7 +605,7 @@ export default function ClassesPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Identifier (letter)</label>
+              <label className="mb-1.5 block text-sm font-medium">Cohort (Letter Only)</label>
               <Input
                 type="text"
                 value={formCohortIdentifier}
@@ -608,7 +619,7 @@ export default function ClassesPage() {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium">
-                Sub-category <span className="text-muted-foreground font-normal">(optional)</span>
+                Sub-Cohort Category (Number, Optional)
               </label>
               <Input
                 type="text"
@@ -620,13 +631,25 @@ export default function ClassesPage() {
               <p className="mt-1 text-xs text-muted-foreground">{COHORT_SUB_CATEGORY_HINT}</p>
             </div>
 
+            {/* Live Preview Badge */}
+            <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-3">
+              <span className="text-xs font-medium text-muted-foreground">Resulting Cohort Identifier:</span>
+              <Badge variant="secondary" className="font-mono text-sm font-bold">
+                {formatCohortIdentifier({
+                  education_level: formEducationLevel,
+                  cohort_identifier: formCohortIdentifier || "?",
+                  cohort_sub_category: formCohortSubCategory || null,
+                })}
+              </Badge>
+            </div>
+
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={closeModal}>
                 Cancel
               </Button>
               <Button type="submit" disabled={formSubmitting}>
                 {formSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-                {editingClass ? "Save Changes" : "Create Class"}
+                {editingClass ? "Save Changes" : "Create Cohort"}
               </Button>
             </DialogFooter>
           </form>
@@ -635,13 +658,13 @@ export default function ClassesPage() {
 
       <ConfirmDialog
         open={deleteConfirmClass !== null}
-        title="Permanently Delete Class & All Records"
+        title="Permanently Delete Cohort & All Records"
         description={
           deleteConfirmClass
-            ? `Are you sure you want to delete ${formatClassLabel(deleteConfirmClass)}? This will permanently wipe this class and all associated data.`
+            ? `Are you sure you want to delete ${formatCohortIdentifier(deleteConfirmClass)} (${formatClassLabel(deleteConfirmClass)})? This will permanently wipe this cohort and all associated records.`
             : ""
         }
-        checkboxLabel="I understand that this will permanently delete this class, all timetable slots, scheduled and completed sessions, and attendance logs."
+        checkboxLabel="I understand that this will permanently delete this cohort, all timetable slots, scheduled and completed sessions, and attendance logs."
         confirmLabel="Delete Everything"
         onConfirm={() => deleteConfirmClass && handleDelete(deleteConfirmClass)}
         onCancel={() => setDeleteConfirmClass(null)}
@@ -650,7 +673,7 @@ export default function ClassesPage() {
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
           <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
           <ul className="mt-1 list-disc pl-4 space-y-0.5 text-muted-foreground">
-            <li>All timetable slots scheduled for this class</li>
+            <li>All timetable slots scheduled for this cohort</li>
             <li>All sessions (scheduled, completed, and cancelled)</li>
             <li>All student lesson attendance records</li>
             <li>All student roster enrollments</li>
@@ -660,9 +683,9 @@ export default function ClassesPage() {
 
       <ConfirmDialog
         open={bulkConfirmOpen}
-        title="Permanently Delete Multiple Classes & All Records"
-        description={`Are you sure you want to delete ${selectedIds.length} selected class(es)? This action will permanently remove all associated schedules and records.`}
-        checkboxLabel={`I understand that this will permanently delete ${selectedIds.length} class(es), their timetable slots, all past and future sessions, and attendance logs.`}
+        title="Permanently Delete Multiple Cohorts & All Records"
+        description={`Are you sure you want to delete ${selectedIds.length} selected cohort(s)? This action will permanently remove all associated schedules and records.`}
+        checkboxLabel={`I understand that this will permanently delete ${selectedIds.length} cohort(s), their timetable slots, all past and future sessions, and attendance logs.`}
         confirmLabel="Delete Everything"
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkConfirmOpen(false)}
@@ -671,7 +694,7 @@ export default function ClassesPage() {
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-foreground">
           <p className="font-semibold text-destructive">Warning: Cascading Permanent Deletion</p>
           <p className="mt-1 text-muted-foreground">
-            Deleting {selectedIds.length} class(es) will permanently cascade delete all timetable slots, scheduled/completed sessions, student rosters, and attendance records for all selected classes.
+            Deleting {selectedIds.length} cohort(s) will permanently cascade delete all timetable slots, scheduled/completed sessions, student rosters, and attendance records for all selected cohorts.
           </p>
         </div>
       </ConfirmDialog>

@@ -318,9 +318,9 @@ export function createApi(token: string) {
     getClass: (id: number) =>
       request<import("./types").Class>(`/classes/${id}/`, token),
 
-    getClassAttendanceSummary: (id: number, range: import("./types").AnalyticsRange) =>
+    getClassAttendanceSummary: (id: number, range: import("./types").AnalyticsRange, subjectId?: number | null) =>
       request<import("./types").ClassAttendanceSummary>(
-        `/classes/${id}/attendance-summary/?range=${encodeURIComponent(range)}`,
+        `/classes/${id}/attendance-summary/${buildQueryString({ range, subject_id: subjectId })}`,
         token
       ),
 
@@ -544,6 +544,12 @@ export function createApi(token: string) {
         body: JSON.stringify({ class_obj_id: classObjId, student_id: studentId }),
       }),
 
+    updateClassStudent: (id: number, classObjId: number) =>
+      request<import("./types").ClassStudent>(`/class-students/${id}/`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ class_obj_id: classObjId }),
+      }),
+
     deleteClassStudent: (id: number) =>
       request<void>(`/class-students/${id}/`, token, { method: "DELETE" }),
 
@@ -552,6 +558,65 @@ export function createApi(token: string) {
         method: "DELETE",
         body: JSON.stringify({ ids }),
       }),
+
+    // --- Student Subject Enrollments (Cross-Enrollment) ---
+    listStudentSubjectEnrollments: (params?: Record<string, string | number | undefined | null>) =>
+      fetchAllPages<import("./types").StudentSubjectEnrollment>(`/student-subject-enrollments/`, token, params),
+
+    listStudentSubjectEnrollmentsPage: (params?: Record<string, string | number | undefined | null>) =>
+      fetchPage<import("./types").StudentSubjectEnrollment>(`/student-subject-enrollments/`, token, params),
+
+    createStudentSubjectEnrollment: (
+      classObjId: number,
+      studentId: number,
+      subjectId: number,
+      status: import("./types").CourseEnrollmentStatus = "enrolled"
+    ) =>
+      request<import("./types").StudentSubjectEnrollment>(`/student-subject-enrollments/`, token, {
+        method: "POST",
+        body: JSON.stringify({ class_obj_id: classObjId, student_id: studentId, subject_id: subjectId, status }),
+      }),
+
+    // --- Courses & Timetable Conflicts ---
+    listCourses: (params?: Record<string, string | number | undefined | null>, forceRefresh = false) =>
+      cachedRequest<import("./types").Course[]>(`/courses/${buildQueryString(params)}`, token, {}, DEFAULT_TTL_MS, forceRefresh),
+
+    createCourse: async (data: import("./types").CoursePayload) => {
+      const res = await request<import("./types").Course>(`/courses/`, token, {
+        method: "POST",
+        body: JSON.stringify(data),
+      })
+      clearApiCache("/courses/")
+      return res
+    },
+
+    deleteCourse: async (id: number) => {
+      const res = await request<void>(`/courses/${id}/`, token, { method: "DELETE" })
+      clearApiCache("/courses/")
+      return res
+    },
+
+    getCourseAttendanceSummary: (courseId: number, range: import("./types").AnalyticsRange) =>
+      request<import("./types").ClassAttendanceSummary>(
+        `/courses/${courseId}/attendance-summary/?range=${encodeURIComponent(range)}`,
+        token
+      ),
+
+    getStudentTimetableAndConflicts: (
+      studentId: number,
+      params?: {
+        candidate_class_id?: number
+        candidate_subject_id?: number
+        candidate_course_id?: number
+      }
+    ) =>
+      request<import("./types").StudentTimetableConflictsResponse>(
+        `/timetable/student/${studentId}/${buildQueryString(params)}`,
+        token
+      ),
+
+    deleteStudentSubjectEnrollment: (id: number) =>
+      request<void>(`/student-subject-enrollments/${id}/`, token, { method: "DELETE" }),
 
     // --- Subjects ---
     listSubjects: (params?: Record<string, string | number | undefined | null>, forceRefresh = false) =>

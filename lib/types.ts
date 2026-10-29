@@ -459,6 +459,18 @@ export interface ClassStudent {
   class_obj_id?: number
 }
 
+// --- StudentSubjectEnrollment ---
+
+export interface StudentSubjectEnrollment {
+  id: number
+  student: Student | number | any
+  class_obj: Class | number | any
+  subject: Subject | number | any
+  student_id?: number
+  class_obj_id?: number
+  subject_id?: number
+}
+
 // --- Session Attendance & Ad-Hoc Sessions ---
 
 export interface SessionAttendance {
@@ -700,4 +712,96 @@ export interface SchoolEvent {
 
 export interface MyEventRegistration extends Omit<EventRegistration, "event"> {
   event: SchoolEvent
+}
+
+
+// --- Cohort / Course / Timetable Conflict Architecture Extensions ---
+
+export interface Class {
+  /** Single-letter cohort code (e.g. K, A, B). */
+  cohort?: string
+  /** Nullable number/sub-category (e.g. 1, 2). */
+  sub_cohort_category?: string | null
+  /** Combined Cohort Identifier (e.g. "IG K1", "IAL K2"). */
+  full_cohort_identifier?: string
+}
+
+export type Cohort = Class
+
+export interface Course {
+  id: number
+  class_obj: Class
+  cohort?: Class
+  subject: Subject
+  default_teacher?: Teacher | null
+  class_obj_id?: number
+  subject_id?: number
+  default_teacher_id?: number | null
+  cohort_identifier: string
+  course_label: string
+}
+
+export interface CoursePayload {
+  class_obj_id?: number
+  cohort_id?: number
+  subject_id: number
+  default_teacher_id?: number | null
+}
+
+export type CourseEnrollmentStatus = "enrolled" | "dropped"
+
+export interface TimetableConflictSlot {
+  slot_id: number
+  course_id: number | null
+  class_id: number
+  cohort_identifier: string
+  subject_id: number
+  subject_name: string
+  course_label: string
+  teacher_id: number
+  teacher_name: string | null
+  day_of_week: number
+  day_name: string
+  start_time: string
+  end_time: string
+  room: string | null
+}
+
+export interface TimetableConflictItem {
+  day_of_week: number
+  day_name: string
+  overlap_start: string
+  overlap_end: string
+  slot_a: TimetableConflictSlot
+  slot_b: TimetableConflictSlot
+  message: string
+}
+
+export interface StudentTimetableConflictsResponse {
+  student_id: number
+  slots: TimetableSlot[]
+  has_conflicts: boolean
+  conflict_count: number
+  conflicting_slot_ids: number[]
+  conflicting_course_keys: string[]
+  conflicts: TimetableConflictItem[]
+}
+
+export interface StudentSubjectEnrollment {
+  course?: Course | null
+  course_id?: number | null
+  status?: CourseEnrollmentStatus
+  cohort_identifier?: string
+  course_label?: string
+  has_conflicts?: boolean
+  conflict_count?: number
+  conflicts?: TimetableConflictItem[]
+}
+
+export type CourseEnrollment = StudentSubjectEnrollment
+
+export interface TimetableSlot {
+  course_id?: number | null
+  cohort_identifier?: string
+  course_label?: string
 }
