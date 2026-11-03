@@ -4,37 +4,14 @@ import * as React from "react"
 import { Moon, Rabbit, Sun, Turtle } from "lucide-react"
 import { StandardPageHeader } from "@/components/standard-page-header"
 import { StaggerContainer, StaggerItem } from "@/components/animated-stagger"
-import { ThemePaletteCard } from "@/components/theme-palette-card"
-import { useTheme, type ThemeMode, type ThemePalette } from "@/components/theme-provider"
+import { useTheme, type ThemeMode } from "@/components/theme-provider"
 import { useMotionPreference } from "@/components/motion-preference-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-const PALETTES: {
-  id: ThemePalette
-  label: string
-  description: string
-}[] = [
-  {
-    id: "emerald",
-    label: "Hinthar",
-    description: "Emerald accent on zinc neutrals — the default look.",
-  },
-  {
-    id: "mono",
-    label: "Monochrome",
-    description: "Dashboard-style greys with quiet table chrome.",
-  },
-  {
-    id: "amoled",
-    label: "AMOLED",
-    description: "Monochrome chrome on a true-black page in dark mode.",
-  },
-]
-
 export default function SettingsPage() {
-  const { theme, palette, setTheme, setPalette } = useTheme()
+  const { theme, setTheme } = useTheme()
   const { reducedMotion, toggleReducedMotion } = useMotionPreference()
 
   return (
@@ -45,33 +22,7 @@ export default function SettingsPage() {
         />
       </StaggerItem>
 
-      <div className="flex flex-col gap-8">
-        <StaggerItem>
-          <section className="flex flex-col gap-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                Palette
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Preview matches your current light or dark mode.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {PALETTES.map((item) => (
-                <ThemePaletteCard
-                  key={item.id}
-                  palette={item.id}
-                  label={item.label}
-                  description={item.description}
-                  mode={theme}
-                  selected={palette === item.id}
-                  onSelect={() => setPalette(item.id)}
-                />
-              ))}
-            </div>
-          </section>
-        </StaggerItem>
-
+      <div className="flex flex-col gap-6">
         <StaggerItem>
           <Card>
             <CardHeader>

@@ -24,11 +24,12 @@ import { ChartChunkSkeleton } from "@/components/charts/chart-chunk-skeleton"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { InspectorSheet } from "@/components/design-system/v2-primitives"
+import { toast } from "@/components/ui/toast"
 
 const TeacherAccountabilityCharts = dynamic(
   () =>
@@ -163,17 +164,18 @@ function TeacherDetailContent() {
     try {
       const token = await getToken()
       if (!token) throw new Error("No auth token available")
-      setTeacher(
-        await createApi(token).updateTeacher(teacher.id, {
-          ...form,
-          name: form.name.trim(),
-          contact: form.contact?.trim() || null,
-          join_date: form.join_date || null,
-        })
-      )
+      const updated = await createApi(token).updateTeacher(teacher.id, {
+        ...form,
+        name: form.name.trim(),
+        contact: form.contact?.trim() || null,
+        join_date: form.join_date || null,
+      })
+      setTeacher(updated)
       setEditOpen(false)
+      toast.add({ title: "Faculty profile updated successfully.", type: "success" })
     } catch (err) {
-      setError(err instanceof ApiError ? err.userMessage : "Failed to update teacher")
+      const msg = err instanceof ApiError ? err.userMessage : "Failed to update teacher"
+      toast.add({ title: msg, type: "error" })
     } finally {
       setSaving(false)
     }
@@ -447,101 +449,132 @@ function TeacherDetailContent() {
             </CardContent>
           </Card>
           {isStaff ? (
-            <Dialog open={editOpen} onOpenChange={setEditOpen}>
-              <DialogContent onClose={() => setEditOpen(false)}>
-                <DialogHeader>
-                  <DialogTitle>Edit teacher</DialogTitle>
-                  <DialogDescription>Update profile and employment details.</DialogDescription>
-                </DialogHeader>
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-sm font-medium" htmlFor="teacher-name">
-                      Name
-                    </label>
-                    <Input
-                      id="teacher-name"
-                      value={form.name}
-                      onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">School</label>
-                    <Select
-                      items={SCHOOL_CODES}
-                      value={form.school_code}
-                      onValueChange={(value) => setForm((item) => ({ ...item, school_code: value ?? "HIS" }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SCHOOL_CODES.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Employment type</label>
-                    <Select
-                      items={employmentItems}
-                      value={form.employment_type ?? "none"}
-                      onValueChange={(value) =>
-                        setForm((item) => ({
-                          ...item,
-                          employment_type:
-                            value === "none" ? null : (value as TeacherPayload["employment_type"]),
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {EMPLOYMENT_TYPES.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium" htmlFor="join-date">
-                      Join date
-                    </label>
-                    <Input
-                      id="join-date"
-                      type="date"
-                      value={form.join_date ?? ""}
-                      onChange={(event) => setForm((item) => ({ ...item, join_date: event.target.value || null }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium" htmlFor="contact">
-                      Contact
-                    </label>
-                    <Input
-                      id="contact"
-                      value={form.contact ?? ""}
-                      onChange={(event) => setForm((item) => ({ ...item, contact: event.target.value }))}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setEditOpen(false)}>
+            <InspectorSheet
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              code={teacher.unique_code}
+              title={`Edit ${teacher.name}`}
+              subtitle="Slide-Over Faculty Profile Editor"
+              footerActions={
+                <div className="flex w-full items-center justify-between gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditOpen(false)}
+                    disabled={saving}
+                    className="font-mono text-xs uppercase"
+                  >
                     Cancel
                   </Button>
-                  <Button disabled={saving || !form.name.trim()} onClick={() => void saveTeacher()}>
-                    {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
-                    Save
+                  <Button
+                    size="sm"
+                    onClick={() => void saveTeacher()}
+                    disabled={saving || !form.name.trim()}
+                    className="font-mono text-xs uppercase"
+                  >
+                    {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                    Save Changes
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </div>
+              }
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    School Stream <span className="text-destructive">*</span>
+                  </label>
+                  <Select
+                    items={SCHOOL_CODES}
+                    value={form.school_code}
+                    onValueChange={(value) => setForm((item) => ({ ...item, school_code: value ?? "HIS" }))}
+                  >
+                    <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                      <span className="truncate">
+                        {SCHOOL_CODES.find((o) => o.value === form.school_code)
+                          ? `${form.school_code} — ${SCHOOL_CODES.find((o) => o.value === form.school_code)?.label}`
+                          : form.school_code}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SCHOOL_CODES.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.value} — {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label htmlFor="teacher-name" className="mb-1.5 block text-sm font-medium">
+                    Full Name <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="teacher-name"
+                    value={form.name}
+                    onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
+                    placeholder="e.g. Daw Su Su"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Employment Type
+                  </label>
+                  <Select
+                    items={employmentItems}
+                    value={form.employment_type ?? "none"}
+                    onValueChange={(value) =>
+                      setForm((item) => ({
+                        ...item,
+                        employment_type:
+                          value === "none" ? null : (value as TeacherPayload["employment_type"]),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                      <span className="truncate">
+                        {form.employment_type
+                          ? (EMPLOYMENT_TYPES.find((o) => o.value === form.employment_type)?.label ?? form.employment_type)
+                          : "None / Unassigned"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None / Unassigned</SelectItem>
+                      {EMPLOYMENT_TYPES.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label htmlFor="join-date" className="mb-1.5 block text-sm font-medium">
+                    Join Date
+                  </label>
+                  <Input
+                    id="join-date"
+                    type="date"
+                    value={form.join_date ?? ""}
+                    onChange={(event) => setForm((item) => ({ ...item, join_date: event.target.value || null }))}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="contact" className="mb-1.5 block text-sm font-medium">
+                    Contact Information
+                  </label>
+                  <Input
+                    id="contact"
+                    value={form.contact ?? ""}
+                    onChange={(event) => setForm((item) => ({ ...item, contact: event.target.value }))}
+                    placeholder="Phone number or email"
+                  />
+                </div>
+              </div>
+            </InspectorSheet>
           ) : null}
         </>
       )}

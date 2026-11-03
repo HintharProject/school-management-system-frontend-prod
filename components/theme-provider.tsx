@@ -20,8 +20,8 @@ function applyMode(theme: ThemeMode) {
   document.documentElement.classList.toggle("dark", theme === "dark")
 }
 
-function applyPalette(palette: ThemePalette) {
-  document.documentElement.dataset.palette = palette
+function applyPalette(_palette: ThemePalette) {
+  document.documentElement.dataset.palette = "mono"
 }
 
 function isPalette(value: string | null): value is ThemePalette {
@@ -34,7 +34,7 @@ function isTheme(value: string | null): value is ThemeMode {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = React.useState<ThemeMode>("light")
-  const [palette, setPaletteState] = React.useState<ThemePalette>("emerald")
+  const [palette] = React.useState<ThemePalette>("mono")
 
   React.useEffect(() => {
     const storedTheme = localStorage.getItem(THEME_KEY)
@@ -44,17 +44,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         ? "dark"
         : "light"
 
-    const storedPalette = localStorage.getItem(PALETTE_KEY)
-    const preferredPalette: ThemePalette = isPalette(storedPalette)
-      ? storedPalette
-      : "emerald"
-
     Promise.resolve().then(() => {
       setThemeState(preferredTheme)
-      setPaletteState(preferredPalette)
     })
     applyMode(preferredTheme)
-    applyPalette(preferredPalette)
+    applyPalette("mono")
   }, [])
 
   const setTheme = React.useCallback((next: ThemeMode) => {
@@ -63,10 +57,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyMode(next)
   }, [])
 
-  const setPalette = React.useCallback((next: ThemePalette) => {
-    setPaletteState(next)
-    localStorage.setItem(PALETTE_KEY, next)
-    applyPalette(next)
+  const setPalette = React.useCallback((_next: ThemePalette) => {
+    // V2 strictly enforces the monochrome system; palette switching is retired.
   }, [])
 
   const toggleTheme = React.useCallback(() => {
