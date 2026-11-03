@@ -16,6 +16,7 @@ import {
   Users,
   Calendar,
   ClipboardList,
+  RefreshCw,
 } from "lucide-react"
 
 import { ApiError, createApi } from "@/lib/api"
@@ -41,6 +42,8 @@ import type {
   ClassStudent,
   Course,
   Student,
+  Subject,
+  Teacher,
   TimetableSlot,
 } from "@/lib/types"
 import { EDUCATION_LEVELS } from "@/lib/types"
@@ -60,6 +63,7 @@ import {
   DataModule,
   CodeChip,
   TelemetryTag,
+  InspectorSheet,
 } from "@/components/design-system/v2-primitives"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -71,14 +75,6 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   Table,
   TableBody,
   TableCell,
@@ -87,6 +83,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { toast } from "@/components/ui/toast"
+
+function formatLevelBadge(level?: string | null): string {
+  if (!level) return "COHORT"
+  return EDUCATION_LEVELS.find((l) => l.value === level)?.label ?? level
+}
+
+function getLevelOptionLabel(val?: string | null): string {
+  if (!val) return "Select Level"
+  return EDUCATION_LEVELS.find((l) => l.value === val)?.label ?? val
+}
 
 const ClassCampusChart = dynamic(
   () =>
@@ -144,6 +150,14 @@ function ClassDetailContent() {
   const [cohort, setCohort] = React.useState("")
   const [subcategory, setSubcategory] = React.useState("")
 
+  // Subject Offerings
+  const [allSubjects, setAllSubjects] = React.useState<Subject[]>([])
+  const [allTeachers, setAllTeachers] = React.useState<Teacher[]>([])
+  const [assignSubjectId, setAssignSubjectId] = React.useState("")
+  const [assignTeacherId, setAssignTeacherId] = React.useState("")
+  const [assigningCourse, setAssigningCourse] = React.useState(false)
+  const [unlinkingCourseId, setUnlinkingCourseId] = React.useState<number | null>(null)
+
   // Roster Enrollment
   const [studentId, setStudentId] = React.useState("")
   const [enrolling, setEnrolling] = React.useState(false)
@@ -157,19 +171,23 @@ function ClassDetailContent() {
       const token = await getToken()
       if (!token) throw new Error("No auth token available")
       const api = createApi(token)
-      const [foundClass, rosterPage, studentPage, timetable, courseList] =
+      const [foundClass, rosterPage, studentPage, timetable, courseList, subjectList, teacherList] =
         await Promise.all([
           api.getClass(classId),
           api.listClassStudentsPage({ class_id: classId, page_size: 200 }),
           api.listStudentsPage({ page_size: 200 }),
           api.getClassTimetable(classId),
           api.listCourses({ cohort_id: classId }).catch(() => [] as Course[]),
+          api.listSubjects().catch(() => [] as Subject[]),
+          api.listTeachers().catch(() => [] as Teacher[]),
         ])
       setClassItem(foundClass)
       setRoster(rosterPage.results)
       setStudents(studentPage.results)
       setSlots(timetable)
       setCourses(courseList ?? [])
+      setAllSubjects(subjectList ?? [])
+      setAllTeachers(teacherList ?? [])
     } catch (err) {
       toast.add({
         title: "Failed to Load Cohort",
@@ -381,6 +399,62 @@ function ClassDetailContent() {
     }
   }
 
+  const handleAssignCourse = async () => {
+    if (!classItem || !assignSubjectId) return
+    setAssigningCourse(true)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error("No auth token available")
+      const created = await createApi(token).createCourse({
+        class_obj_id: classItem.id,
+        subject_id: Number(assignSubjectId),
+        default_teacher_id: assignTeacherId ? Number(assignTeacherId) : undefined,
+      })
+      setCourses((prev) => [...prev, created])
+      setAssignSubjectId("")
+      setAssignTeacherId("")
+      toast.add({
+        title: "Subject Assigned",
+        description: "Subject offering assigned to cohort curriculum.",
+        type: "success",
+      })
+    } catch (err) {
+      toast.add({
+        title: "Assignment Failed",
+        description:
+          err instanceof ApiError ? err.userMessage : "Failed to assign subject",
+        type: "error",
+      })
+    } finally {
+      setAssigningCourse(false)
+    }
+  }
+
+  const handleUnlinkCourse = async (courseId?: number) => {
+    if (!courseId) return
+    setUnlinkingCourseId(courseId)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error("No auth token available")
+      await createApi(token).deleteCourse(courseId)
+      setCourses((prev) => prev.filter((c) => c.id !== courseId))
+      toast.add({
+        title: "Subject Unlinked",
+        description: "Offering removed from cohort curriculum.",
+        type: "success",
+      })
+    } catch (err) {
+      toast.add({
+        title: "Unlink Failed",
+        description:
+          err instanceof ApiError ? err.userMessage : "Failed to unlink subject",
+        type: "error",
+      })
+    } finally {
+      setUnlinkingCourseId(null)
+    }
+  }
+
   const enroll = async () => {
     if (!studentId || !classItem) return
     setEnrolling(true)
@@ -543,15 +617,15 @@ function ClassDetailContent() {
               variant="outline"
               size="sm"
               onClick={openEdit}
-              className="h-8 gap-1.5 rounded-sm px-3 font-mono text-xs"
+              className="h-8 gap-1.5 rounded-sm px-3 font-mono text-xs uppercase"
             >
               <Pencil className="size-3.5" />
               Edit Cohort
             </Button>
             <Button
               size="sm"
-              onClick={() => router.push(`/attendance/class/${classItem.id}/`)}
-              className="h-8 gap-1.5 rounded-sm px-3 font-mono text-xs font-semibold"
+              onClick={() => router.push(`/attendance?classId=${classItem.id}`)}
+              className="h-8 gap-1.5 rounded-sm px-3 font-mono text-xs font-semibold uppercase"
             >
               <ClipboardList className="size-3.5" />
               Take Roll
@@ -560,16 +634,91 @@ function ClassDetailContent() {
         }
       />
 
-      {/* 2. Courses Offered DataModule */}
+      {/* 2. Courses Offered / Subject Offerings DataModule */}
       <DataModule
         totalCount={offeredCourses.length}
         countLabel="COURSES"
         toolbarRight={
-          <span className="font-mono text-xs text-muted-foreground uppercase">
-            {offeredCourses.length} ACTIVE SUBJECT OFFERINGS
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground uppercase">
+              {offeredCourses.length} ACTIVE SUBJECT OFFERINGS
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadCore()}
+              disabled={loading}
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs uppercase"
+            >
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         }
       >
+        <div className="p-3 border-b border-border bg-muted/20">
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            <Select
+              value={assignSubjectId}
+              onValueChange={(val) => setAssignSubjectId(val ?? "")}
+            >
+              <SelectTrigger className="h-8 w-full sm:w-[240px] justify-between rounded-sm font-mono text-xs">
+                <span className="truncate">
+                  {assignSubjectId
+                    ? (() => {
+                        const s = allSubjects.find(
+                          (sub) => String(sub.id) === assignSubjectId
+                        )
+                        return s
+                          ? `SUB-${String(s.id).padStart(2, "0")} — ${s.name}`
+                          : assignSubjectId
+                      })()
+                    : "Select Subject to Offer..."}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {allSubjects.map((s) => (
+                  <SelectItem
+                    key={s.id}
+                    value={String(s.id)}
+                    className="font-mono text-xs"
+                  >
+                    SUB-{String(s.id).padStart(2, "0")} — {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <SearchableSelect
+              className="flex-1 w-full"
+              triggerClassName="h-8 rounded-sm font-mono text-xs"
+              options={allTeachers.map((t) => ({
+                value: String(t.id),
+                label: t.name,
+                subLabel: t.unique_code,
+              }))}
+              value={assignTeacherId}
+              onValueChange={setAssignTeacherId}
+              placeholder="Assigned Faculty (Optional)..."
+              searchPlaceholder="Search faculty members..."
+            />
+
+            <Button
+              disabled={!assignSubjectId || assigningCourse}
+              onClick={() => void handleAssignCourse()}
+              size="sm"
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold shrink-0 uppercase"
+            >
+              {assigningCourse ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Plus className="size-3.5" />
+              )}
+              Assign Subject
+            </Button>
+          </div>
+        </div>
+
         <Table>
           <TableHeader>
             <TableRow className="h-9 bg-muted/30 hover:bg-muted/30">
@@ -585,13 +734,16 @@ function ClassDetailContent() {
               <TableHead className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Assigned Teacher
               </TableHead>
+              <TableHead className="text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Action
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {offeredCourses.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={4}
+                  colSpan={5}
                   className="h-24 text-center font-mono text-xs text-muted-foreground"
                 >
                   No courses or timetable slots scheduled for this cohort yet.
@@ -615,6 +767,27 @@ function ClassDetailContent() {
                   <TableCell className="font-mono text-xs text-foreground">
                     {c.teacherName ?? "Unassigned"}
                   </TableCell>
+                  <TableCell className="text-right">
+                    {c.courseId ? (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="h-7 rounded-sm text-destructive hover:text-destructive font-mono text-[11px]"
+                        disabled={unlinkingCourseId === c.courseId}
+                        onClick={() => void handleUnlinkCourse(c.courseId)}
+                        title="Unlink subject offering from cohort"
+                      >
+                        {unlinkingCourseId === c.courseId ? (
+                          <Loader2 className="size-3 animate-spin mr-1" />
+                        ) : (
+                          <Trash2 className="size-3 mr-1" />
+                        )}
+                        Unlink
+                      </Button>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -626,7 +799,7 @@ function ClassDetailContent() {
       <HubTimetableCard
         slots={slots}
         description="Snippet of this cohort's weekly class schedule. Use the full timetable editor to configure slots."
-        editorHref={`/timetable/${classItem.id}/`}
+        editorHref={`/timetable?classId=${classItem.id}`}
         slotLine="teacher"
       />
 
@@ -642,6 +815,16 @@ function ClassDetailContent() {
             <span className="font-mono text-xs text-muted-foreground uppercase">
               {roster.length} TOTAL ENROLLED
             </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadCore()}
+              disabled={loading}
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs uppercase"
+            >
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+              Refresh
+            </Button>
           </div>
         }
       >
@@ -649,6 +832,7 @@ function ClassDetailContent() {
           <div className="flex flex-col sm:flex-row items-center gap-2">
             <SearchableSelect
               className="flex-1 w-full"
+              triggerClassName="h-8 rounded-sm font-mono text-xs"
               options={studentOptions}
               value={studentId}
               onValueChange={setStudentId}
@@ -659,7 +843,7 @@ function ClassDetailContent() {
               disabled={!studentId || enrolling}
               onClick={() => void enroll()}
               size="sm"
-              className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold shrink-0"
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold shrink-0 uppercase"
             >
               {enrolling ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -875,125 +1059,139 @@ function ClassDetailContent() {
         </div>
       </div>
 
-      {/* 6. Edit Cohort Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent onClose={() => setEditOpen(false)}>
-          <DialogHeader>
-            <DialogTitle>Edit Cohort</DialogTitle>
-            <DialogDescription>
-              Update education level, cohort letter, and optional sub-category.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                Education Level
-              </label>
-              <Select
-                value={educationLevel}
-                onValueChange={(value) =>
-                  setEducationLevel(value as ClassPayload["education_level"])
-                }
-              >
-                <SelectTrigger className="w-full justify-between rounded-sm text-xs font-medium">
-                  <span className="truncate">
-                    {EDUCATION_LEVELS.find((opt) => opt.value === educationLevel)
-                      ?.label ?? educationLevel}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {EDUCATION_LEVELS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label
-                className="mb-1 block font-mono text-xs font-semibold uppercase text-muted-foreground"
-                htmlFor="cohort"
-              >
-                Cohort (Single Letter Only)
-              </label>
-              <Input
-                id="cohort"
-                value={cohort}
-                onChange={(event) =>
-                  setCohort(
-                    sanitizeCohortIdentifierInput(event.target.value)
-                  )
-                }
-                maxLength={COHORT_IDENTIFIER_MAX_LENGTH}
-                placeholder={COHORT_IDENTIFIER_PLACEHOLDER}
-                className="rounded-sm"
-              />
-              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                {COHORT_IDENTIFIER_HINT}
-              </p>
-            </div>
-
-            <div>
-              <label
-                className="mb-1 block font-mono text-xs font-semibold uppercase text-muted-foreground"
-                htmlFor="subcategory"
-              >
-                Sub-Cohort Category (Number, Optional)
-              </label>
-              <Input
-                id="subcategory"
-                value={subcategory}
-                onChange={(event) =>
-                  setSubcategory(
-                    sanitizeCohortSubCategoryInput(event.target.value)
-                  )
-                }
-                maxLength={COHORT_SUB_CATEGORY_MAX_LENGTH}
-                placeholder={COHORT_SUB_CATEGORY_PLACEHOLDER}
-                className="rounded-sm"
-              />
-              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                {COHORT_SUB_CATEGORY_HINT}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between rounded-sm border border-border bg-muted/40 p-3">
-              <span className="font-mono text-xs uppercase text-muted-foreground">
-                Resulting Identifier:
-              </span>
-              <CodeChip accent>
-                {formatCohortIdentifier({
-                  education_level: educationLevel,
-                  cohort_identifier: cohort.trim() || "?",
-                  cohort_sub_category: subcategory.trim() || null,
-                })}
-              </CodeChip>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-2">
+      {/* 6. Slide-Over Edit Cohort InspectorSheet */}
+      <InspectorSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        code={formatCohortIdentifier(classItem)}
+        title={`Edit ${formatCohortIdentifier(classItem)}`}
+        subtitle="Update education level, stream identifier, and sub-category"
+        status={{
+          label: formatLevelBadge(classItem.education_level),
+          variant: "neutral",
+        }}
+        fields={[
+          { label: "COHORT ID", value: `#${classItem.id}`, mono: true },
+          { label: "ENROLLED STUDENTS", value: String(roster.length), mono: true },
+          { label: "ASSIGNED SUBJECTS", value: String(offeredCourses.length), mono: true },
+        ]}
+        footerActions={
+          <div className="flex w-full items-center justify-between gap-2">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => setEditOpen(false)}
-              className="rounded-sm font-mono text-xs"
+              disabled={saving}
+              className="h-8 rounded-sm font-mono text-xs uppercase"
             >
               Cancel
             </Button>
             <Button
+              size="sm"
               disabled={saving || !cohort.trim()}
               onClick={() => void saveClass()}
-              className="rounded-sm font-mono text-xs font-semibold"
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold uppercase"
             >
-              {saving && <Loader2 className="mr-2 size-3.5 animate-spin" />}
+              {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
               Save Changes
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
+              Education Level <span className="text-destructive">*</span>
+            </label>
+            <Select
+              value={educationLevel}
+              onValueChange={(value) =>
+                setEducationLevel(value as ClassPayload["education_level"])
+              }
+            >
+              <SelectTrigger className="h-8 w-full justify-between rounded-sm font-mono text-xs">
+                <span className="truncate">
+                  {getLevelOptionLabel(educationLevel)}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {EDUCATION_LEVELS.map((level) => (
+                  <SelectItem
+                    key={level.value}
+                    value={level.value}
+                    className="font-mono text-xs"
+                  >
+                    {level.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground"
+              htmlFor="cohort"
+            >
+              Cohort Stream (Single Letter Only) <span className="text-destructive">*</span>
+            </label>
+            <Input
+              id="cohort"
+              value={cohort}
+              onChange={(event) =>
+                setCohort(
+                  sanitizeCohortIdentifierInput(event.target.value)
+                )
+              }
+              maxLength={COHORT_IDENTIFIER_MAX_LENGTH}
+              placeholder={COHORT_IDENTIFIER_PLACEHOLDER}
+              className="h-8 rounded-sm font-mono text-xs"
+              required
+            />
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {COHORT_IDENTIFIER_HINT}
+            </p>
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground"
+              htmlFor="subcategory"
+            >
+              Sub-Cohort Category (Optional Number)
+            </label>
+            <Input
+              id="subcategory"
+              value={subcategory}
+              onChange={(event) =>
+                setSubcategory(
+                  sanitizeCohortSubCategoryInput(event.target.value)
+                )
+              }
+              maxLength={COHORT_SUB_CATEGORY_MAX_LENGTH}
+              placeholder={COHORT_SUB_CATEGORY_PLACEHOLDER}
+              className="h-8 rounded-sm font-mono text-xs"
+            />
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {COHORT_SUB_CATEGORY_HINT}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-sm border border-border bg-muted/40 p-3">
+            <span className="font-mono text-xs uppercase text-muted-foreground">
+              Resulting Identifier:
+            </span>
+            <CodeChip accent>
+              {formatCohortIdentifier({
+                education_level: educationLevel,
+                cohort_identifier: cohort.trim() || "?",
+                cohort_sub_category: subcategory.trim() || null,
+              })}
+            </CodeChip>
+          </div>
+        </div>
+      </InspectorSheet>
     </div>
   )
 }

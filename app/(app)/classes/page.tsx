@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useAuth } from "@clerk/nextjs"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -56,7 +57,7 @@ import {
   TelemetryTag,
   InspectorSheet,
 } from "@/components/design-system/v2-primitives"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -73,14 +74,6 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { toast } from "@/components/ui/toast"
 
@@ -95,6 +88,16 @@ function matchesLevelFilter(educationLevel: string, filter: LevelFilter): boolea
     return upper.startsWith("YEAR") || upper.startsWith("YR") || /^Y\d/.test(upper)
   }
   return true
+}
+
+function formatLevelBadge(level?: string | null): string {
+  if (!level) return "COHORT"
+  return EDUCATION_LEVELS.find((l) => l.value === level)?.label ?? level
+}
+
+function getLevelOptionLabel(val?: string | null): string {
+  if (!val) return "Select Level"
+  return EDUCATION_LEVELS.find((l) => l.value === val)?.label ?? val
 }
 
 function ClassesContent() {
@@ -240,6 +243,15 @@ function ClassesContent() {
   const [selectedCohortIds, setSelectedCohortIds] = React.useState<number[]>([])
   const [cohortPage, setCohortPage] = React.useState(1)
   const cohortPageSize = 10
+
+  const levelCounts = React.useMemo(() => {
+    return {
+      ALL: classes.length,
+      IG: classes.filter((c) => matchesLevelFilter(c.education_level, "IG")).length,
+      IAL: classes.filter((c) => matchesLevelFilter(c.education_level, "IAL")).length,
+      YR: classes.filter((c) => matchesLevelFilter(c.education_level, "YR")).length,
+    }
+  }, [classes])
 
   const filteredCohorts = React.useMemo(() => {
     return classes.filter((c) => {
@@ -924,6 +936,9 @@ function ClassesContent() {
                 ] as const
               ).map((lvl) => {
                 const active = levelFilter === lvl.id
+                const count = levelCounts[lvl.id]
+                const isEmpty = lvl.id !== "ALL" && count === 0
+
                 return (
                   <button
                     key={lvl.id}
@@ -932,11 +947,18 @@ function ClassesContent() {
                       setLevelFilter(lvl.id)
                       setCohortPage(1)
                     }}
+                    title={
+                      isEmpty
+                        ? `No cohorts registered under ${lvl.label}`
+                        : `${count} cohort${count === 1 ? "" : "s"} under ${lvl.label}`
+                    }
                     className={cn(
                       "h-8 rounded-sm border px-2.5 font-mono text-[11px] font-semibold transition-colors uppercase",
                       active
                         ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                        : isEmpty
+                          ? "border-border/60 bg-background text-muted-foreground/40 hover:bg-muted/40 hover:text-muted-foreground"
+                          : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     {lvl.label}
@@ -1301,67 +1323,101 @@ function ClassesContent() {
         }
         subtitle={
           drawerMode === "edit"
-            ? "Update cohort education level and identifiers directly in slide-over drawer."
+            ? "Update cohort education level and stream identifiers"
             : "Academics Hub · Cohort Telemetry, Linked Subjects, and Roster"
         }
-        status={{
-          label: drawerMode === "edit" ? "EDITING MODE" : "ACTIVE COHORT",
-          tone: drawerMode === "edit" ? "info" : "active",
-        }}
+        status={
+          inspectedCohort
+            ? {
+                label: formatLevelBadge(inspectedCohort.education_level),
+                variant: "neutral",
+              }
+            : undefined
+        }
+        fields={
+          inspectedCohort
+            ? [
+                {
+                  label: "LEVEL",
+                  value: formatLevelBadge(inspectedCohort.education_level),
+                  mono: true,
+                },
+                {
+                  label: "ENROLLED STUDENTS",
+                  value: `${studentCountByClass.get(inspectedCohort.id) ?? 0} Students`,
+                  mono: true,
+                },
+                {
+                  label: "SUBJECT OFFERINGS",
+                  value: `${activeCohortCourses.length} Subjects`,
+                  mono: true,
+                },
+              ]
+            : undefined
+        }
         footerActions={
           inspectedCohort ? (
-            <div className="flex w-full items-center justify-between gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (drawerMode === "edit") {
-                    setDrawerMode("inspect")
-                  } else {
-                    setInspectedCohort(null)
-                  }
-                }}
-                className="h-8 rounded-sm font-mono text-xs"
-              >
-                {drawerMode === "edit" ? "Cancel" : "Close"}
-              </Button>
-
-              {drawerMode === "edit" ? (
+            drawerMode === "inspect" ? (
+              <div className="flex w-full items-center justify-between gap-2">
                 <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteConfirmCohort(inspectedCohort)}
+                  className="h-8 rounded-sm font-mono text-xs text-destructive hover:bg-destructive/10 hover:text-destructive uppercase"
+                >
+                  <Trash2 className="mr-1.5 size-3.5" />
+                  Delete Cohort
+                </Button>
+                <Link
+                  href={`/classes/${inspectedCohort.id}`}
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "default" }),
+                    "h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold uppercase"
+                  )}
+                >
+                  Open Cohort Hub
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <div className="flex w-full items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDrawerMode("inspect")}
+                  disabled={drawerSaving}
+                  className="h-8 rounded-sm font-mono text-xs uppercase"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  form="cohort-drawer-edit-form"
                   size="sm"
                   disabled={drawerSaving || !drawerEditIdentifier.trim()}
-                  onClick={(e) => handleSaveDrawerCohort(e)}
-                  className="h-8 gap-1 rounded-sm font-mono text-xs font-semibold"
+                  className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold uppercase"
                 >
-                  {drawerSaving && <Loader2 className="size-3.5 animate-spin mr-1" />}
+                  {drawerSaving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
                   Save Changes
                 </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => router.push(`/classes/${inspectedCohort.id}`)}
-                  className="h-8 gap-1 rounded-sm font-mono text-xs font-semibold"
-                >
-                  Open Full Hub
-                  <ArrowRight className="size-3.5" />
-                </Button>
-              )}
-            </div>
+              </div>
+            )
           ) : null
         }
       >
         {inspectedCohort && (
           <div className="space-y-4">
             {/* Mode Switcher Tab Bar right at the top of the drawer body */}
-            <div className="flex items-center gap-1 border-b border-border pb-3">
+            <div className="flex items-center gap-1 rounded-sm border border-border bg-muted/40 p-1 font-mono text-xs">
               <button
                 type="button"
                 onClick={() => setDrawerMode("inspect")}
                 className={cn(
-                  "h-7 rounded-sm px-3 font-mono text-xs font-semibold transition-colors uppercase",
+                  "flex-1 rounded-sm py-1.5 text-center font-semibold uppercase transition-colors",
                   drawerMode === "inspect"
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-foreground text-background shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 Overview & Offerings
@@ -1370,21 +1426,21 @@ function ClassesContent() {
                 type="button"
                 onClick={() => setDrawerMode("edit")}
                 className={cn(
-                  "h-7 rounded-sm px-3 font-mono text-xs font-semibold transition-colors uppercase",
+                  "flex-1 rounded-sm py-1.5 text-center font-semibold uppercase transition-colors",
                   drawerMode === "edit"
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-foreground text-background shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Edit Configuration
+                Edit Cohort
               </button>
             </div>
 
             {drawerMode === "edit" ? (
-              <form onSubmit={handleSaveDrawerCohort} className="space-y-4">
+              <form id="cohort-drawer-edit-form" onSubmit={handleSaveDrawerCohort} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                    Education Level
+                    Education Level <span className="text-destructive">*</span>
                   </label>
                   <Select
                     value={drawerEditLevel}
@@ -1392,15 +1448,14 @@ function ClassesContent() {
                       setDrawerEditLevel(val as ClassPayload["education_level"])
                     }
                   >
-                    <SelectTrigger className="w-full justify-between rounded-sm text-xs font-medium">
+                    <SelectTrigger className="h-8 w-full justify-between rounded-sm font-mono text-xs">
                       <span className="truncate">
-                        {EDUCATION_LEVELS.find((l) => l.value === drawerEditLevel)?.label ??
-                          drawerEditLevel}
+                        {getLevelOptionLabel(drawerEditLevel)}
                       </span>
                     </SelectTrigger>
                     <SelectContent>
                       {EDUCATION_LEVELS.map((lvl) => (
-                        <SelectItem key={lvl.value} value={lvl.value}>
+                        <SelectItem key={lvl.value} value={lvl.value} className="font-mono text-xs">
                           {lvl.label}
                         </SelectItem>
                       ))}
@@ -1410,7 +1465,7 @@ function ClassesContent() {
 
                 <div>
                   <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                    Cohort (Single Letter Only)
+                    Cohort (Single Letter Only) <span className="text-destructive">*</span>
                   </label>
                   <Input
                     type="text"
@@ -1422,7 +1477,7 @@ function ClassesContent() {
                     }
                     maxLength={COHORT_IDENTIFIER_MAX_LENGTH}
                     placeholder={COHORT_IDENTIFIER_PLACEHOLDER}
-                    className="rounded-sm font-mono text-xs"
+                    className="h-8 rounded-sm font-mono text-xs"
                     required
                   />
                   <p className="mt-1 font-mono text-[11px] text-muted-foreground">
@@ -1444,7 +1499,7 @@ function ClassesContent() {
                     }
                     maxLength={COHORT_SUB_CATEGORY_MAX_LENGTH}
                     placeholder={COHORT_SUB_CATEGORY_PLACEHOLDER}
-                    className="rounded-sm font-mono text-xs"
+                    className="h-8 rounded-sm font-mono text-xs"
                   />
                   <p className="mt-1 font-mono text-[11px] text-muted-foreground">
                     {COHORT_SUB_CATEGORY_HINT}
@@ -1466,83 +1521,25 @@ function ClassesContent() {
               </form>
             ) : (
               <div className="space-y-5">
-                {/* Telemetry Attributes key-value grid */}
-                <div>
-                  <div className="mb-2 flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    <span className="size-1.5 rounded-[1px] bg-primary" />
-                    TELEMETRY ATTRIBUTES
-                  </div>
-                  <div className="divide-y divide-border/60 border-t border-b border-border/60">
-                    {[
-                      {
-                        label: "COHORT CODE",
-                        value: formatCohortIdentifier(inspectedCohort),
-                        mono: true,
-                      },
-                      {
-                        label: "LEVEL",
-                        value: inspectedCohort.education_level,
-                      },
-                      {
-                        label: "COHORT LETTER",
-                        value: inspectedCohort.cohort_identifier,
-                        mono: true,
-                      },
-                      {
-                        label: "SUB-CATEGORY",
-                        value: inspectedCohort.cohort_sub_category ?? "—",
-                        mono: true,
-                      },
-                      {
-                        label: "ENROLLED STUDENTS",
-                        value: `${studentCountByClass.get(inspectedCohort.id) ?? 0} enrolled`,
-                        mono: true,
-                      },
-                      {
-                        label: "SUBJECT OFFERINGS",
-                        value: `${activeCohortCourses.length} offerings`,
-                        mono: true,
-                      },
-                    ].map((field, idx) => (
-                      <div
-                        key={`${field.label}-${idx}`}
-                        className="grid grid-cols-[130px_1fr] items-center gap-3 border-b border-border/60 py-2 text-xs last:border-b-0"
-                      >
-                        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                          {field.label}
-                        </span>
-                        <div
-                          className={cn(
-                            "text-right font-medium text-foreground break-words",
-                            field.mono && "font-mono tabular-nums"
-                          )}
-                        >
-                          {field.value}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Direct Hub Link Card */}
+                {/* Complete Cohort Hub Card */}
                 <div className="flex items-center justify-between rounded-sm border border-border bg-muted/20 p-3">
-                  <div className="space-y-0.5">
-                    <div className="font-mono text-xs font-bold text-foreground">
-                      COHORT HUB & ENROLLMENT ROSTER
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="text-xs font-bold text-foreground">
+                      Complete Cohort Hub & Timetable
                     </div>
                     <div className="font-mono text-[11px] text-muted-foreground">
-                      {studentCountByClass.get(inspectedCohort.id) ?? 0} enrolled students
+                      {studentCountByClass.get(inspectedCohort.id) ?? 0} enrolled students · Full roster, schedule & attendance
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => router.push(`/classes/${inspectedCohort.id}`)}
-                    className="h-7 gap-1 rounded-sm font-mono text-[11px]"
+                  <Link
+                    href={`/classes/${inspectedCohort.id}`}
+                    className={cn(
+                      buttonVariants({ size: "xs", variant: "outline" }),
+                      "h-7 shrink-0 gap-1 rounded-sm font-mono text-[11px] uppercase"
+                    )}
                   >
-                    View Roster
-                    <ExternalLink className="size-3" />
-                  </Button>
+                    Cohort Hub →
+                  </Link>
                 </div>
 
                 {/* Linked Subject Offerings List */}
@@ -1819,127 +1816,124 @@ function ClassesContent() {
       </InspectorSheet>
 
       {/* ==================================================================== */}
-      {/* 4. Add Cohort Modal Dialog                                           */}
+      {/* 4. Add Cohort Modal (<InspectorSheet />)                             */}
       {/* ==================================================================== */}
-      <Dialog
+      <InspectorSheet
         open={createCohortModalOpen}
         onOpenChange={(val) => !val && setCreateCohortModalOpen(false)}
+        code="NEW COHORT"
+        title="Create Academic Cohort"
+        subtitle="Configure education level, cohort stream, and initial subject offerings"
+        status={{ label: "DRAFT", variant: "neutral" }}
+        footerActions={
+          <div className="flex w-full items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCreateCohortModalOpen(false)}
+              className="h-8 rounded-sm font-mono text-xs uppercase"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="create-cohort-form"
+              disabled={cohortSubmitting || !formCohortIdentifier.trim()}
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold uppercase"
+            >
+              {cohortSubmitting && (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              )}
+              Create Cohort
+            </Button>
+          </div>
+        }
       >
-        <DialogContent onClose={() => setCreateCohortModalOpen(false)}>
-          <DialogHeader>
-            <DialogTitle>Add Cohort</DialogTitle>
-            <DialogDescription>
-              Enter education level and cohort identifier letter.
-            </DialogDescription>
-          </DialogHeader>
+        <form id="create-cohort-form" onSubmit={handleCreateCohortSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
+              Education Level <span className="text-destructive">*</span>
+            </label>
+            <Select
+              value={formEducationLevel}
+              onValueChange={(val) =>
+                setFormEducationLevel(val as ClassPayload["education_level"])
+              }
+            >
+              <SelectTrigger className="h-8 w-full justify-between rounded-sm font-mono text-xs">
+                <span className="truncate">
+                  {getLevelOptionLabel(formEducationLevel)}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {EDUCATION_LEVELS.map((level) => (
+                  <SelectItem key={level.value} value={level.value} className="font-mono text-xs">
+                    {level.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <form onSubmit={handleCreateCohortSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                Education Level
-              </label>
-              <Select
-                value={formEducationLevel}
-                onValueChange={(val) =>
-                  setFormEducationLevel(val as ClassPayload["education_level"])
-                }
-              >
-                <SelectTrigger className="w-full justify-between rounded-sm text-xs font-medium">
-                  <span className="truncate">
-                    {EDUCATION_LEVELS.find((l) => l.value === formEducationLevel)
-                      ?.label ?? formEducationLevel}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {EDUCATION_LEVELS.map((level) => (
-                    <SelectItem key={level.value} value={level.value}>
-                      {level.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div>
+            <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
+              Cohort (Single Letter Only) <span className="text-destructive">*</span>
+            </label>
+            <Input
+              type="text"
+              value={formCohortIdentifier}
+              onChange={(e) =>
+                setFormCohortIdentifier(
+                  sanitizeCohortIdentifierInput(e.target.value)
+                )
+              }
+              maxLength={COHORT_IDENTIFIER_MAX_LENGTH}
+              placeholder={COHORT_IDENTIFIER_PLACEHOLDER}
+              className="h-8 rounded-sm font-mono text-xs"
+              required
+            />
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {COHORT_IDENTIFIER_HINT}
+            </p>
+          </div>
 
-            <div>
-              <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                Cohort (Single Letter Only)
-              </label>
-              <Input
-                type="text"
-                value={formCohortIdentifier}
-                onChange={(e) =>
-                  setFormCohortIdentifier(
-                    sanitizeCohortIdentifierInput(e.target.value)
-                  )
-                }
-                maxLength={COHORT_IDENTIFIER_MAX_LENGTH}
-                placeholder={COHORT_IDENTIFIER_PLACEHOLDER}
-                className="rounded-sm"
-                required
-              />
-              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                {COHORT_IDENTIFIER_HINT}
-              </p>
-            </div>
+          <div>
+            <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
+              Sub-Cohort Category (Optional Number)
+            </label>
+            <Input
+              type="text"
+              value={formCohortSubCategory}
+              onChange={(e) =>
+                setFormCohortSubCategory(
+                  sanitizeCohortSubCategoryInput(e.target.value)
+                )
+              }
+              maxLength={COHORT_SUB_CATEGORY_MAX_LENGTH}
+              placeholder={COHORT_SUB_CATEGORY_PLACEHOLDER}
+              className="h-8 rounded-sm font-mono text-xs"
+            />
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {COHORT_SUB_CATEGORY_HINT}
+            </p>
+          </div>
 
-            <div>
-              <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                Sub-Cohort Category (Optional Number)
-              </label>
-              <Input
-                type="text"
-                value={formCohortSubCategory}
-                onChange={(e) =>
-                  setFormCohortSubCategory(
-                    sanitizeCohortSubCategoryInput(e.target.value)
-                  )
-                }
-                maxLength={COHORT_SUB_CATEGORY_MAX_LENGTH}
-                placeholder={COHORT_SUB_CATEGORY_PLACEHOLDER}
-                className="rounded-sm"
-              />
-              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                {COHORT_SUB_CATEGORY_HINT}
-              </p>
-            </div>
-
-            {/* Live Resulting Identifier Preview */}
-            <div className="flex items-center justify-between rounded-sm border border-border bg-muted/40 p-3">
-              <span className="font-mono text-xs uppercase text-muted-foreground">
-                Resulting Identifier:
-              </span>
-              <CodeChip accent>
-                {formatCohortIdentifier({
-                  education_level: formEducationLevel,
-                  cohort_identifier: formCohortIdentifier || "?",
-                  cohort_sub_category: formCohortSubCategory || null,
-                })}
-              </CodeChip>
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateCohortModalOpen(false)}
-                className="rounded-sm"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={cohortSubmitting}
-                className="rounded-sm font-mono text-xs font-semibold"
-              >
-                {cohortSubmitting && (
-                  <Loader2 className="mr-2 size-3.5 animate-spin" />
-                )}
-                Create Cohort
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          {/* Live Resulting Identifier Preview */}
+          <div className="flex items-center justify-between rounded-sm border border-border bg-muted/40 p-3">
+            <span className="font-mono text-xs uppercase text-muted-foreground">
+              Resulting Identifier:
+            </span>
+            <CodeChip accent>
+              {formatCohortIdentifier({
+                education_level: formEducationLevel,
+                cohort_identifier: formCohortIdentifier || "?",
+                cohort_sub_category: formCohortSubCategory || null,
+              })}
+            </CodeChip>
+          </div>
+        </form>
+      </InspectorSheet>
 
       {/* Delete Single Cohort Confirm Dialog */}
       <ConfirmDialog
@@ -1976,62 +1970,67 @@ function ClassesContent() {
       />
 
       {/* ==================================================================== */}
-      {/* 5. Subject CRUD Modals                                               */}
+      {/* 5. Subject CRUD (<InspectorSheet />)                                 */}
       {/* ==================================================================== */}
-      <Dialog
+      <InspectorSheet
         open={subjectModalOpen}
         onOpenChange={(val) => !val && setSubjectModalOpen(false)}
+        code={
+          editingSubject
+            ? (editingSubject as any).code || `SUB-${String(editingSubject.id).padStart(2, "0")}`
+            : "NEW SUBJECT"
+        }
+        title={
+          editingSubject
+            ? `Edit ${editingSubject.name}`
+            : "Add Subject to Catalog"
+        }
+        subtitle="Define subject name and examination syllabus code"
+        status={{
+          label: editingSubject ? "CATALOG ITEM" : "NEW SUBJECT",
+          variant: "neutral",
+        }}
+        footerActions={
+          <div className="flex w-full items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSubjectModalOpen(false)}
+              className="h-8 rounded-sm font-mono text-xs uppercase"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="subject-modal-form"
+              disabled={subjectSubmitting || !formSubjectName.trim()}
+              className="h-8 gap-1.5 rounded-sm font-mono text-xs font-semibold uppercase"
+            >
+              {subjectSubmitting && (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              )}
+              {editingSubject ? "Save Changes" : "Create Subject"}
+            </Button>
+          </div>
+        }
       >
-        <DialogContent onClose={() => setSubjectModalOpen(false)}>
-          <DialogHeader>
-            <DialogTitle>
-              {editingSubject ? "Edit Subject" : "Add Subject"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingSubject
-                ? "Update curriculum subject name."
-                : "Add a new subject to the global subject catalog."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubjectSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
-                Subject Name <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="text"
-                value={formSubjectName}
-                onChange={(e) => setFormSubjectName(e.target.value)}
-                placeholder="e.g. Mathematics, Physics, Chemistry..."
-                className="rounded-sm"
-                required
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setSubjectModalOpen(false)}
-                className="rounded-sm"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={subjectSubmitting || !formSubjectName.trim()}
-                className="rounded-sm font-mono text-xs font-semibold"
-              >
-                {subjectSubmitting && (
-                  <Loader2 className="mr-2 size-3.5 animate-spin" />
-                )}
-                {editingSubject ? "Save Changes" : "Create Subject"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        <form id="subject-modal-form" onSubmit={handleSubjectSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block font-mono text-xs font-semibold uppercase text-muted-foreground">
+              Subject Name <span className="text-destructive">*</span>
+            </label>
+            <Input
+              type="text"
+              value={formSubjectName}
+              onChange={(e) => setFormSubjectName(e.target.value)}
+              placeholder="e.g. Mathematics, Physics, Chemistry..."
+              className="h-8 rounded-sm font-mono text-xs"
+              required
+            />
+          </div>
+        </form>
+      </InspectorSheet>
 
       {/* Delete Subject Confirm Dialog */}
       <ConfirmDialog
