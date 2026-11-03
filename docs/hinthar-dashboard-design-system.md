@@ -1,381 +1,119 @@
-# Hinthar Dashboard: Design System & UI Architecture Specification
+# Hinthar Dashboard — Design System v2 & Staff Frontend Revamp Blueprint
 
-> **Historical (2026).** Do not copy tokens, cobalt/HSL palettes, or layout recipes from this file.
-> Live contracts: [`FRONTEND_STANDARDS.md`](./FRONTEND_STANDARDS.md) §7, `app/globals.css`, and the in-app Design System page.
-> Palettes are `emerald` / `mono` / `amoled` (`data-palette`), orthogonal to light/dark.
-
-This document was an early specification for redefining the **Hinthar School Management Dashboard**. It standardized layout structures around the **shadcn/ui `sidebar-08` (Inset Variant)** pattern and a dual Vercel Dark / Clean Light palette that is **no longer the implemented token set**.
+> **Status:** Authoritative Specification (Locked In for Production Rollout)  
+> **Live Interactive Prototype & Token Studio:** `/design-system`  
+> **Shared Primitives Module:** `components/design-system/v2-primitives.tsx`
 
 ---
 
-## 1. Executive Design Principles
+## 1. Aesthetic & Theme Architecture (Strict 2-Mode Monochrome)
 
-1. **Inset Workspace Architecture (`sidebar-08`)**: Shift from top-bar dropdowns ("Management", "Check In") to a structured inset sidebar with a workspace switcher, collapsible nav groups, and persistent user controls.
-2. **Standardized Component Layouts**: Eliminate bespoke layout variations across pages. Every management screen (Classes, Teachers, Students, Subjects, Sessions) follows a uniform layout template: **Header + KPI Bar + Search/Filter Toolbar + Data Table + Slide-over Sheet Details**.
-3. **Dual Color System (Vercel Obsidian & Minimalist Clean Light)**:
-   - **Dark Mode**: High-contrast, pitch-to-obsidian dark palette with crisp borders, subtle glassmorphism, and functional status accents.
-   - **Light Mode**: High-legibility minimal off-white layout with pure white surface cards, soft zinc borders, and deep slate typography.
-4. **Context-Driven Micro-Interactions**: Keyboard shortcuts (`Cmd + K` search, `Cmd + B` sidebar toggle), inline status editing, and dedicated drawer views for scanning and token management.
+Hinthar v2 retires the legacy 3-palette matrix (`emerald` / `mono` / `amoled`) and enforces **strictly two high-contrast operational modes (`Light` & `Dark`)** with zero decorative brand accents.
 
----
+### 1.1 3-Tier Surface Contrast Hierarchy
 
-## 2. Color Scheme Specification & CSS Variables
+| Surface Tier | Token | Light Mode Spec | Dark Mode Spec | Primary Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 01 — Canvas** | `--background` | `#F4F4F5` (`oklch(0.985 0.001 286)`) | `#09090B` (Zinc 950) | App shell viewport & recessed workspace floor so elevated modules stand out via 1px structural borders without drop shadows. |
+| **Tier 02 — Module** | `--card` | `#FFFFFF` (Pure White) | `#121215` (Elevated Charcoal) | `SystemHeader`, `DataModule` frames, 7-day timetable cards, and slide-over `InspectorSheet` drawers. |
+| **Tier 03 — Elevated / Chrome** | `--popover` / `--muted` | `#FAFAFA` / `#F4F4F5` | `#18181C` / `#1B1B20` | Docked command toolbars, uppercase table headers (`h-9`), dropdown menus, and sticky pagination footers. |
+| **Structural Hairline** | `--border` | `#E4E4E7` (`oklch(0.92 0.004 286.32)`) | `#242429` | Crisp `1px` exposed structural grid dividers separating sidebar, command header, and table modules. |
+| **Primary Monochrome** | `--primary` | `#18181B` (Zinc 900) | `#FAFAFA` (Zinc 50) | Primary CTAs, active tab underlines, active filter pills (`LVL`), and focus rings. |
 
-### 2.1 CSS Variables Architecture (`globals.css`)
+### 1.2 Semantic Telemetry Colors (Reserved Strictly for Status Meaning)
 
-```css
-@layer base {
-  /* ==========================================================================
-     LIGHT MODE — Minimalist Clean Slate Palette
-     ========================================================================== */
-  :root {
-    /* Base Surfaces */
-    --background: 210 20% 98%;          /* #f8fafc - Very light neutral blue-grey */
-    --foreground: 222.2 84% 4.9%;       /* #020817 - Deep midnight text */
-    
-    /* Card & Surfaces */
-    --card: 0 0% 100%;                  /* #ffffff - Pure white cards */
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+Color is never used for decorative UI chrome. Chromatic tokens are reserved exclusively for real-time attendance, session, and gate telemetry:
 
-    /* Brand & Actions */
-    --primary: 221.2 83.2% 53.3%;       /* #2563eb - Cobalt blue accent */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;         /* #f1f5f9 - Muted grey control fill */
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    /* Muted Text & Backgrounds */
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%; /* #64748b - Slate secondary text */
-
-    /* Accent & Selection */
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    /* Functional Indicators */
-    --destructive: 0 84.2% 60.2%;       /* Crimson red */
-    --destructive-foreground: 210 40% 98%;
-    --success: 142.1 76.2% 36.3%;       /* Emerald green */
-    --warning: 37.7 92.1% 50.2%;        /* Amber warning */
-
-    /* Borders & Inputs */
-    --border: 214.3 31.8% 91.4%;        /* #e2e8f0 - Crisp subtle line */
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
-
-    /* Sidebar Inset Theme Variables (Light) */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 240 5.9% 90%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  /* ==========================================================================
-     DARK MODE — Vercel Industrial Obsidian Palette
-     ========================================================================== */
-  .dark {
-    /* Base Surfaces */
-    --background: 240 10% 3.9%;         /* #09090b - Deep Vercel Black */
-    --foreground: 0 0% 98%;             /* #fafafa - Crisp off-white text */
-
-    /* Card & Surfaces */
-    --card: 240 10% 5.9%;               /* #0f0f12 - Slightly raised surface */
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 5.9%;
-    --popover-foreground: 0 0% 98%;
-
-    /* Brand & Actions */
-    --primary: 0 0% 98%;                /* Pure white primary button/text */
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;        /* Dark muted control button */
-    --secondary-foreground: 0 0% 98%;
-
-    /* Muted Text & Backgrounds */
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;   /* #a1a1aa - Zinc secondary text */
-
-    /* Accent & Selection */
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-
-    /* Functional Status Tokens */
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142.1 70.6% 45.3%;
-    --warning: 38 92% 50%;
-
-    /* Borders & Inputs */
-    --border: 240 3.7% 15.9%;           /* #27272a - Zinc dark border */
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-
-    /* Sidebar Inset Theme Variables (Dark Vercel Style) */
-    --sidebar-background: 240 10% 3.9%;  /* Matches root background for inset look */
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-}
-```
+- **Present / Completed (`--success`):** Emerald (`#109868` Light / `#22C58B` Dark)
+- **Late / Substitute Active (`--warning`):** Amber (`#D9820F` Light / `#F59E0B` Dark)
+- **Absent / Revoked / Exception (`--destructive`):** Crimson (`#E12D39` Light / `#F43F5E` Dark)
+- **Excused / Archived:** Neutral Steel (`--attendance-excused` / `--muted-foreground`)
 
 ---
 
-## 3. `sidebar-08` (Inset Variant) Component Architecture
+## 2. Geometry, Spacing & Typography
 
-The `sidebar-08` component pattern features an **Inset Frame** (`SidebarInset`), where the sidebar acts as a clean outer container and the main application panel floats inside with rounded corners (`rounded-xl`) and distinct border separation.
-
-### 3.1 Structural Tree Breakdown
-
-```text
-<SidebarProvider defaultOpen={true}>
-  ├── <AppSidebar variant="inset" collapsible="icon">
-  │     ├── <SidebarHeader>
-  │     │     └── <WorkspaceSwitcher />  ── [Hinthar Academy / Campus Dropdown]
-  │     ├── <SidebarContent>
-  │     │     ├── <SidebarGroup label="Overview">
-  │     │     │     └── <SidebarMenu> [Dashboard, Analytics]
-  │     │     ├── <SidebarGroup label="Management">
-  │     │     │     └── <SidebarMenu> [Classes, Teachers, Students, Subjects]
-  │     │     ├── <SidebarGroup label="Operations">
-  │     │     │     └── <SidebarMenu> [Sessions, Timetables, Session Attendance, Check-In]
-  │     └── <SidebarFooter>
-  │           └── <NavUser />  ── [User Profile, Theme Toggle, Logout]
-  │
-  └── <SidebarInset>  ── [Main Floating Canvas]
-        ├── <SiteHeader>
-        │     ├── <SidebarTrigger />  ── [Toggle Button (Cmd + B)]
-        │     ├── <Separator orientation="vertical" />
-        │     ├── <Breadcrumbs />  ── [Management / Classes / Year 6 - A]
-        │     ├── <CommandSearch />  ── [Quick Search Input (Cmd + K)]
-        │     └── <HeaderActions>  ── [Focus Mode, Notifications, Live Time]
-        └── <main className="p-6">
-              └── {PageContent}
-```
+1. **Crisp Tactical Geometry (`--radius: 0.25rem` / `4px`):**
+   - Outer module containers (`SystemHeader`, `DataModule`): `rounded-md` (`6px`) or `rounded-sm` (`4px`) with `1px border-border`.
+   - Buttons (`components/ui/button.tsx`), inputs, select triggers, and slot cards: `rounded-sm` (`4px`).
+   - Micro-badges (`CodeChip`, `TelemetryTag`): `rounded-[2px]` (`2px` corner radius).
+2. **Zero Double Borders & Zero Detached Toolbars:**
+   - Search inputs, filter pills, bulk-selection actions, data tables, and pagination footers must be docked inside a single unified `<DataModule />` frame (`0px` gap between toolbar, table header, body, and footer).
+3. **Typography & Tabular Discipline:**
+   - **Page Titles:** `text-xl font-bold tracking-tight text-foreground` (`20px`)
+   - **Overlines & Table Headers:** `font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground`
+   - **Primary Table Cell Copy:** `text-[13px] font-medium text-foreground`
+   - **Codes, Timestamps, Rates & Counts:** Always `font-mono tabular-nums` (`HIS-26-1042`, `09:00 - 10:30`, `98.2%`, `23/24`) so vertical columns align to the pixel.
+4. **Motion Discipline:**
+   - Persistent layout chrome (`AppSidebar`, top command bar, tab bars) must **never** re-run entrance animations (`useGsapEnter`) on route transitions.
 
 ---
 
-## 4. Standardized Layout Visualizations & Wireframes
+## 3. Education Center Domain Rules
 
-Below are textual diagrams illustrating how the UI components render across different operational views.
+Hinthar operates as a **7-day flexible education center**, not a traditional homeroom school. All frontend views must enforce these domain rules:
 
-### 4.1 Overall Workspace Wireframe (`sidebar-08` Inset Layout)
-
-```text
-+---------------------------------------------------------------------------------------------------+
-|  [H] Hinthar Academy  v |  (Cmd+B)  Management / Classes                      [Search Cmd+K] (*)  |
-+-------------------------+-------------------------------------------------------------------------+
-| [GROUP: OVERVIEW]       |  Classes Roster                                + Add Class  [Reload]    |
-|  * Dashboard            |  Manage academic cohorts, schedules, and student assignments.           |
-|  * Analytics            | +---------------------------------------------------------------------+ |
-|                         | | Total Classes: 18  | Active Students: 94  | Completed Sessions: 1,023 | |
-| [GROUP: MANAGEMENT]     | +---------------------------------------------------------------------+ |
-|  # Classes        (18)  |                                                                         |
-|  # Teachers       (31)  | [Search classes...]       [Filter: All Levels v] [Columns v] [Export]    |
-|  # Students       (94)  | +----+-----------------+------------------+--------------+------------+ |
-|  # Subjects       (22)  | | ID | EDUCATION LEVEL | COHORT IDENTIFIER| SUB CATEGORY | ACTIONS    | |
-|                         | +----+-----------------+------------------+--------------+------------+ |
-| [GROUP: OPERATIONS]     | | 01 | Year 6          | Cohort A         | --           | [Eye][Edit]| |
-|  $ Sessions     (1023)  | | 02 | Year 6          | Cohort B         | --           | [Eye][Edit]| |
-|  $ Timetables           | | 03 | Year 7          | Cohort C         | Science Pick | [Eye][Edit]| |
-|  $ Check-In Terminal    | | 04 | Year 7          | Cohort D         | Language Pick| [Eye][Edit]| |
-|  $ Attendance Matrix    | +----+-----------------+------------------+--------------+------------+ |
-|                         | | Showing 1-4 of 18 items                     [< Prev] [1] 2 3 [Next >] |
-| [Footer Profile]        | +---------------------------------------------------------------------+ |
-|  (User) Alex Admin (v)  |                                                                         |
-+-------------------------+-------------------------------------------------------------------------+
-```
+1. **No Homeroom Teachers or Fixed Academic Terms on Cohorts:**
+   - Teachers are assigned per subject and timetable slot (`assignedTeacher` / `substituteTeacher`), never as a single homeroom teacher on a cohort.
+   - The education center does not operate on traditional academic years or school terms.
+   - Cohort tables and inspectors display: **Cohort Code** (`IG K1`, `IAL A1`, `Year8 A`), **Education Level** (`IGCSE`, `IAL`, `Year 6–9`), **Stream** (`K · 1`), **Enrolled Students** (`24 students`), and **Subject Offerings / Weekly Slots** (`6 subjects · 18 slots`).
+2. **7-Day Flexible Timetable (`MON`–`SUN`, No Fixed Bell Periods or Lunch Rows):**
+   - Classes run across all 7 days of the week (`Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`, `Sun`), including weekend intensive clinics and practicals.
+   - There are **no fixed bell periods (`P1 / P2 / P3`)** and **no fixed lunch break rows** in the timetable grid.
+   - The Schedule workspace renders a **7-column day grid (`MON | TUE | WED | THU | FRI | SAT | SUN`)** where each day column stacks its time-sorted class cards with their exact start/end times (`09:00 - 10:30`, `11:00 - 13:00`, `14:00 - 15:30`, etc.).
+3. **Option A — Global Subject Catalog Inside Academics Hub (`/classes`):**
+   - `Subject` is a global catalog entity (supporting cross-cohort offerings and ad-hoc sessions where `class_obj = null`).
+   - Instead of a separate top-level sidebar link, the Global Subject Catalog lives as a peer tab (`Cohorts | Subject Catalog`) inside `/classes` (**Academics Hub**), with inline quick-add and cohort/teacher mapping.
 
 ---
 
-### 4.2 Standardized Data Table Layout (Used across all Management Pages)
+## 4. 16-to-7 Navigation & Route Consolidation Plan
 
-To achieve strict visual consistency, **Classes, Teachers, Students, Subjects, and Sessions** will all share the exact same UI wrapper component (`<StandardPageContainer />`).
+The legacy 16 flat sidebar links and middleman class-picker pages are consolidated into **7 high-velocity staff hubs**:
 
-```text
-+---------------------------------------------------------------------------------------------------+
-| PAGE TITLE HEADER                                                                                 |
-| Title: [Page Name]                                                 [ Secondary Action ] [ Primary ] |
-| Subtitle: Contextual explanation of data scope.                                                   |
-+---------------------------------------------------------------------------------------------------+
-| METRIC HIGHLIGHT STRIP (3-4 KPI Cards)                                                            |
-| +-------------------+ +-------------------+ +-------------------+ +-------------------+       |
-| | Total Count       | | Active Rate       | | Weekly Change     | | Quick Alert       |       |
-| | 94                | | 96.2%             | | +12% vs last m    | | 2 Pending      |       |
-| +-------------------+ +-------------------+ +-------------------+ +-------------------+       |
-+---------------------------------------------------------------------------------------------------+
-| CONTROL TOOLBAR                                                                                   |
-| [ Search input...                     ]  [ Dropdown Filter ]  [ Dropdown Status ]  [ View Mode ]  |
-+---------------------------------------------------------------------------------------------------+
-| UNIFIED DATA TABLE                                                                                |
-| [x] | ID  | PRIMARY LABEL     | CATEGORY BADGE   | METRIC STATUS   | LAST ACTIVE   | ACTIONS   |
-|-----+-----+-------------------+------------------+-----------------+---------------+-----------|
-| [ ] | #01 | Zhongli           | Full-Time        | $30.00 / hr     | 10:22:39 PM   | [..]      |
-| [ ] | #02 | Yae Miko          | Tutor            | $35.00 / hr     | 09:15:10 PM   | [..]      |
-| [ ] | #03 | Albedo            | Full-Time        | $28.00 / hr     | 08:00:12 PM   | [..]      |
-+---------------------------------------------------------------------------------------------------+
-| PAGINATION FOOTER                                                                                 |
-| 3 of 31 rows selected.                            Page 1 of 4      [Rows per page: 10 v] [<] [>]  |
-+---------------------------------------------------------------------------------------------------+
-```
+| # | V2 Staff Hub | Primary Route | Legacy Routes Absorbed / Retired | Key UX Consolidation |
+| :- | :--- | :--- | :--- | :--- |
+| **01** | **Overview** | `/overview` | `/overview`, `/analytics-cards` | Real-time campus pulse, daily check-in telemetry, and active substitute/absence queues. |
+| **02** | **Check-In** | `/check-in` | `/check-in`, `/check-in/passes`, `/check-in/management` | Retires the 980-line `/check-in/management` monolith into a clean `Daily Roll | Scan Log` workspace + terminal launcher. |
+| **03** | **Attendance** | `/attendance` | `/attendance`, `/attendance/classes/[classId]` | Eliminates the middleman class-picker page; opens directly into the Roll Matrix with `<CohortSwitcher />` and `<RollStatusControl />`. |
+| **04** | **Schedule** | `/schedule` | `/schedule`, `/schedule/[classId]`, `/substitutions` | Eliminates the middleman class-picker page; opens directly into the 7-day (`MON–SUN`) timetable with slide-over substitute override. |
+| **05** | **Academics** | `/classes` | `/classes`, `/classes/[classId]`, `/subjects` | Unified `Cohorts | Subject Catalog` hub with deduplicated 5-column cohort table and slide-over cohort inspector. |
+| **06** | **Directory** | `/students` | `/students`, `/students/[id]`, `/teachers`, `/check-in/passes` | Unified Student & Faculty directory with inline slide-over QR credential inspector (`View QR` / `Revoke` / `Regenerate`). |
+| **07** | **Communications** | `/communications` | `/communications`, `/announcements`, `/guardian-alerts` | Broadcast announcements, absence notifications, and guardian dispatch logs. |
 
 ---
 
-### 4.3 Redefined Check-In & QR Scanner Interface (Split Terminal View)
+## 5. Enforced V2 Component Primitives (`components/design-system/v2-primitives.tsx`)
 
-Instead of a plain, disconnected scanner, the Check-in terminal utilizes a high-efficiency **Split-Screen Workspace** or a **Slide-Over Sheet Details Panel**.
+Every production page in the rollout must compose these 7 shared primitives:
 
-```text
-+---------------------------------------------------------------------------------------------------+
-| Check-In Terminal & QR Scanner                                            [Focus Fullscreen Switch] |
-+---------------------------------------------------+-----------------------------------------------+
-| LIVE CAMERA SCANNER ENGINE                        | MANUAL LOOKUP & REAL-TIME CONFIRMATION        |
-| Time: 22:24:38 | Wednesday, July 22, 2026         |                                               |
-| +-----------------------------------------------+ | Search Student ID or Name:                    |
-| |                                               | | [ Type ID e.g., 101                 ] [Search] |
-| |              +-----------------+              | |                                               |
-| |              |  SCAN TARGET    |              | | +-------------------------------------------+ |
-| |              |  AUTOMATIC      |              | | | LATEST SCANNER CONFIRMATION               | |
-| |              |  DETECTOR       |              | | |                                           | |
-| |              +-----------------+              | | | Student: Charlotte (#5)                   | |
-| |                                               | | | Class: Year 6 - Cohort A                  | |
-| | Point student QR code at camera to log entry. | | | Time: 10:24:54 PM                         | |
-| +-----------------------------------------------+ | | Status: [ VERIFIED & LOGGED SUCCESS ]     | |
-|                                                   | +-------------------------------------------+ |
-| [ Camera Device: Integrated WebCam (v) ]          |                                               |
-| [ Audio Beep: ON ]  [ Auto Reset: 2 sec ]         | Recent Attendance Stream:                     |
-|                                                   | * 10:24:54 PM - Charlotte (#5) - Year 6-A     |
-|                                                   | * 10:22:12 PM - Yuanwu (#1) - Year 6-A        |
-|                                                   | * 10:19:05 PM - Tribble (#2) - Year 6-B       |
-+---------------------------------------------------+-----------------------------------------------+
-```
+1. **`<SystemHeader />`**:
+   - Unified page header frame with top monospace domain/breadcrumb overline, `20px` bold title, inline tabular telemetry metrics separated by `1px` vertical dividers, primary action slot, and optional docked bottom underline tabs (`tabs`).
+2. **`<DataModule />`**:
+   - Single-border container (`rounded-md border border-border bg-card overflow-hidden`) housing a docked command toolbar (search input + filter pills + contextual bulk-selection bar), flush table/grid viewport, and docked `COUNT ALL //` pagination footer.
+3. **`<CohortSwitcher />`**:
+   - Full-width (`w-full`) non-shifting command bar for `/schedule` and `/attendance`: left `LVL` segmented filter (`ALL | IG | IAL | YR`) + fixed-width `w-[260px]` `<Select>` cohort trigger + anchored `<` `>` stepper buttons + right-aligned term/enrollment summary and `Ad-hoc` session toggle.
+4. **`<RollStatusControl />`**:
+   - Interactive spreadsheet-cell dropdown trigger (`h-7 min-w-[128px]`) for editable attendance matrices, displaying a semantic status dot + uppercase status (`PRESENT`, `LATE`, `ABSENT`, `EXCUSED`) + divided chevron trigger with `[P] / [L] / [A] / [E]` option shortcuts.
+5. **`<TelemetryTag />`**:
+   - **Strictly read-only** `2px`-radius (`rounded-[2px]`) status badge with `size-1.5` indicator pip and uppercase monospace label.
+6. **`<CodeChip />`**:
+   - `2px`-radius monospace identifier chip for cohort codes (`IG K1`), student IDs (`HIS-26-1042`), subject codes (`SUB-01`), and rooms (`RM-201`), with optional `border-l-2 border-l-foreground` accent.
+7. **`<InspectorSheet />`**:
+   - Contextual right-hand slide-over drawer (`sm:max-w-[420px]`) with tactical `CodeChip` + `TelemetryTag` header, 2-column `TELEMETRY ATTRIBUTES` grid, scrollable custom body (QR badge preview, substitute teacher override, dated occurrences), and sticky footer action bar.
 
 ---
 
-### 4.4 Slide-Over Student QR Inspector (Sheet Component)
+## 6. Phased Production Rollout Checklist
 
-When clicking **"View QR"** on any student row, a `shadcn/ui` Sheet opens from the right edge without displacing the active data table page state.
-
-```text
-+--------------------------------------------------------------------------------+---------------+
-| Main Table Page Content (Dimmed / Blurred in background)                       | STUDENT SHEET |
-|                                                                                | Charlotte     |
-|                                                                                | ID: #5        |
-|                                                                                |---------------+
-|                                                                                |  +----------+ |
-|                                                                                |  |  QR CODE | |
-|                                                                                |  |  VECTOR  | |
-|                                                                                |  |  CANVAS  | |
-|                                                                                |  +----------+ |
-|                                                                                |               |
-|                                                                                | Check-in Token|
-|                                                                                | [ QGdHu12... ]|
-|                                                                                |               |
-|                                                                                | [Regenerate]  |
-|                                                                                | [Download QR] |
-+--------------------------------------------------------------------------------+---------------+
-```
-
----
-
-## 5. Component Standardization & Code Templates
-
-### 5.1 Reusable `StandardPageHeader` Template (`components/standard-page-header.tsx`)
-
-```tsx
-import React from "react";
-import { Button } from "@/components/ui/button";
-
-interface PageHeaderProps {
-  title: string;
-  description: string;
-  primaryAction?: {
-    label: string;
-    onClick: () => void;
-    icon?: React.ReactNode;
-  };
-  secondaryAction?: {
-    label: string;
-    onClick: () => void;
-  };
-}
-
-export function StandardPageHeader({
-  title,
-  description,
-  primaryAction,
-  secondaryAction,
-}: PageHeaderProps) {
-  return (
-    <div className="flex flex-col gap-1 pb-4 md:flex-row md:items-center md:justify-between border-b border-border mb-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <div className="flex items-center gap-2 mt-4 md:mt-0">
-        {secondaryAction && (
-          <Button variant="outline" size="sm" onClick={secondaryAction.onClick}>
-            {secondaryAction.label}
-          </Button>
-        )}
-        {primaryAction && (
-          <Button size="sm" onClick={primaryAction.onClick} className="gap-1.5">
-            {primaryAction.icon}
-            {primaryAction.label}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-```
-
----
-
-### 5.2 Unified App Layout Component (`app/layout.tsx`)
-
-```tsx
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
-
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full bg-background text-foreground">
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1 overflow-hidden transition-all duration-200">
-          <SiteHeader />
-          <main className="flex-1 overflow-y-auto p-6">
-            {children}
-          </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
-  );
-}
-```
-
----
-
-## 6. Implementation Checklist
-
-- [ ] **Install Shadcn Sidebar**: Run `npx shadcn@latest add sidebar table dropdown-menu sheet avatar badge`.
-- [ ] **Configure CSS Variables**: Update `globals.css` with the Vercel obsidian dark mode and clean light mode variables provided in Section 2.
-- [ ] **Build `AppSidebar` Component**: Implement `sidebar-08` structure with `WorkspaceSwitcher`, collapsible nav items, and user profile footer.
-- [ ] **Wrap Management Pages in `StandardPageHeader`**: Refactor Classes, Teachers, Students, Subjects, and Sessions to share uniform headers and metric cards.
-- [ ] **Convert Floating Modals to Sheets**: Convert QR code popup views into slide-over `<Sheet />` components for seamless multi-tasking.
-- [ ] **Implement Keyboard Shortcuts**: Hook up `Cmd + B` for sidebar toggle and `Cmd + K` for command search navigation.
+- [x] **Phase 0 — Design System v2 & Interactive Flow Studio (`/design-system`)**:
+  - Locked in strict Light/Dark monochrome tokens in `app/globals.css` and `4px` button geometry in `components/ui/button.tsx`.
+  - Built all 7 shared primitives in `components/design-system/v2-primitives.tsx` and validated all 4 interactive staff workflows in `components/design-system/v2-flows-showcase.tsx`.
+- [ ] **Phase 1 — App Shell & Navigation Consolidation (`components/app-sidebar.tsx`, `components/site-header.tsx`)**:
+  - Switch `Sidebar` from `variant="inset"` to flush `1px border-r` structural layout, remove `gsap.fromTo` header re-animations, and consolidate the sidebar to the 7 staff hubs.
+- [ ] **Phase 2 — Academics Hub (`/classes` + `/subjects` Tab Integration)**:
+  - Deduplicate the `/classes` cohort table using `<SystemHeader />`, `<DataModule />`, and `<InspectorSheet />` (no homeroom column) and mount the Global Subject Catalog as the second tab.
+- [ ] **Phase 3 — Directory & Check-In Hub (`/students`, `/check-in`)**:
+  - Add the slide-over QR credential inspector (`<InspectorSheet />` + `<QrCanvas />`) to `/students` and replace `/check-in/management` with the unified `Daily Roll | Scan Log` workspace.
+- [ ] **Phase 4 — Direct Schedule & Attendance Workspaces (`/schedule`, `/attendance`)**:
+  - Eliminate the middleman class-picker pages, mount the full-width `<CohortSwitcher />`, render the 7-day (`MON–SUN`) flexible education-center timetable on `/schedule`, and wire `<RollStatusControl />` into `/attendance`.

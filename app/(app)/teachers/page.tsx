@@ -2,13 +2,23 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
+import Link from "next/link"
 import { useAuth } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
-import { Plus, Pencil, Trash2, Loader2, Search, UserCheck, Upload } from "lucide-react"
+import {
+  Eye,
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  Upload,
+  UserCheck,
+  X,
+} from "lucide-react"
+
 import { createApi, ApiError } from "@/lib/api"
-import { StaggerContainer, StaggerItem } from "@/components/animated-stagger"
-import { AnimatedTableBody } from "@/components/animation/animated-table-body"
-import { TableRevealProvider } from "@/components/animation/table-reveal-context"
 import {
   type Teacher,
   type TeacherPayload,
@@ -16,24 +26,18 @@ import {
   SCHOOL_CODES,
 } from "@/lib/types"
 import { useSortableData } from "@/lib/use-sortable-data"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { StandardPageHeader, buildReloadAction } from "@/components/standard-page-header"
-import { ConfirmDialog } from "@/components/confirm-dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useServerPagination } from "@/components/use-server-pagination"
-import { StandardTablePagination } from "@/components/standard-table-pagination"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableHeadSortable,
-  TableCell,
-} from "@/components/ui/table"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -42,123 +46,109 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableHeadSortable,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table"
+import {
+  SystemHeader,
+  DataModule,
+  InspectorSheet,
+  CodeChip,
+  TelemetryTag,
+} from "@/components/design-system/v2-primitives"
+import { toast } from "@/components/ui/toast"
 import { cn, toLocalDateString } from "@/lib/utils"
-import { TeacherTableSkeletonRows } from "@/components/page-skeletons"
 
 const BulkImportModal = dynamic(
-  () => import("@/components/bulk-import-modal").then((m) => m.BulkImportModal)
+  () => import("@/components/bulk-import-modal").then((m) => m.BulkImportModal),
+  { ssr: false }
 )
 
 // ---------------------------------------------------------------------------
-// Truncated cell content with tooltip
+// Teacher Creation Modal (brand new profile only)
 // ---------------------------------------------------------------------------
-function TruncatedContent({
-  value,
-  className = "",
-}: {
-  value: string | null | undefined
-  className?: string
-}) {
-  if (!value || !value.trim()) return <span className="text-muted-foreground">—</span>
-  const text = value.trim()
-  return (
-    <Tooltip>
-      <TooltipTrigger onClick={(event) => event.stopPropagation()} className={cn("group/trunc relative block w-full text-left focus:outline-none cursor-pointer", className)}>
-        <span className="block truncate transition-colors duration-150 group-hover/trunc:text-primary group-hover/trunc:underline decoration-dashed decoration-primary/40 underline-offset-3">
-          {text}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs break-words text-xs font-normal shadow-lg border border-border/80 bg-popover text-popover-foreground px-3 py-2 rounded-xl space-y-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Full Text</p>
-        <p className="text-xs font-medium text-foreground">{text}</p>
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
-interface FormData {
-  name: string
-  employment_type: string
-  join_date: string
-  contact: string
-}
-
-const EMPTY_FORM: FormData = {
-  name: "",
-  employment_type: "",
-  join_date: "",
-  contact: "",
-}
-
-function TeacherFormModal({
-  editing,
-  initial,
-  onSave,
+function TeacherCreateModal({
+  open,
   onClose,
+  onSave,
   saving,
   schoolCode,
-  onSchoolCodeChange,
+  setSchoolCode,
 }: {
-  editing: Teacher | null
-  initial: FormData
-  onSave: (data: TeacherPayload) => void
+  open: boolean
   onClose: () => void
+  onSave: (data: TeacherPayload) => Promise<void>
   saving: boolean
   schoolCode: string
-  onSchoolCodeChange: (sc: string) => void
+  setSchoolCode: (sc: string) => void
 }) {
-  const [form, setForm] = React.useState<FormData>(initial)
+  const [name, setName] = React.useState("")
+  const [employmentType, setEmploymentType] = React.useState("")
+  const [joinDate, setJoinDate] = React.useState(() => toLocalDateString())
+  const [contact, setContact] = React.useState("")
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
-  }
+  React.useEffect(() => {
+    if (open) {
+      setName("")
+      setEmploymentType("")
+      setJoinDate(toLocalDateString())
+      setContact("")
+    }
+  }, [open])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name.trim()) return
+    if (!name.trim()) return
 
     const payload: TeacherPayload = {
-      name: form.name.trim(),
+      name: name.trim(),
       school_code: schoolCode,
       employment_type:
-        form.employment_type === "" ? null : (form.employment_type as TeacherPayload["employment_type"]),
-      join_date: form.join_date || null,
-      contact: form.contact.trim() === "" ? null : form.contact.trim(),
+        employmentType === ""
+          ? null
+          : (employmentType as TeacherPayload["employment_type"]),
+      join_date: joinDate || null,
+      contact: contact.trim() === "" ? null : contact.trim(),
     }
-    onSave(payload)
+    await onSave(payload)
   }
 
   return (
-    <Dialog open={true} onOpenChange={(val) => !val && onClose()}>
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent onClose={onClose}>
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit Teacher" : "Add Teacher"}</DialogTitle>
+          <DialogTitle>Add Faculty Member</DialogTitle>
           <DialogDescription>
-            {editing
-              ? "Update teacher information and employment settings."
-              : "Create a new teacher profile."}
+            Create a new teacher profile and configure employment stream.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              School Code <span className="text-destructive">*</span>
+              School Stream <span className="text-destructive">*</span>
             </label>
             <Select
               value={schoolCode}
-              onValueChange={(value) => onSchoolCodeChange(value ?? "")}
+              onValueChange={(value) => setSchoolCode(value ?? "HIS")}
             >
-              <SelectTrigger className="mt-1.5 w-full">
-                <SelectValue placeholder="Select School Code" />
+              <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                <span className="truncate">
+                  {SCHOOL_CODES.find((sc) => sc.value === schoolCode)
+                    ? `${schoolCode} — ${SCHOOL_CODES.find((sc) => sc.value === schoolCode)?.label}`
+                    : schoolCode}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {SCHOOL_CODES.map((sc) => (
                   <SelectItem key={sc.value} value={sc.value}>
-                    {sc.label}
+                    {sc.value} — {sc.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -167,37 +157,34 @@ function TeacherFormModal({
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Name <span className="text-destructive">*</span>
+              Full Name <span className="text-destructive">*</span>
             </label>
             <Input
               type="text"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               required
-              placeholder="Teacher name"
+              placeholder="e.g. Daw Su Su"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Employment Type
             </label>
             <Select
-              items={[{ value: "none", label: "None" }, ...EMPLOYMENT_TYPES]}
-              value={form.employment_type || "none"}
-              onValueChange={(val) =>
-                setForm((prev) => ({
-                  ...prev,
-                  employment_type: !val || val === "none" ? "" : val,
-                }))
-              }
+              value={employmentType || "none"}
+              onValueChange={(val) => setEmploymentType(!val || val === "none" ? "" : val)}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue />
+              <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                <span className="truncate">
+                  {employmentType
+                    ? (EMPLOYMENT_TYPES.find((et) => et.value === employmentType)?.label ?? employmentType)
+                    : "None / Unassigned"}
+                </span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="none">None / Unassigned</SelectItem>
                 {EMPLOYMENT_TYPES.map((et) => (
                   <SelectItem key={et.value} value={et.value}>
                     {et.label}
@@ -208,24 +195,20 @@ function TeacherFormModal({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Join Date
-            </label>
+            <label className="mb-1.5 block text-sm font-medium">Join Date</label>
             <Input
               type="date"
-              name="join_date"
-              value={form.join_date}
-              onChange={handleChange}
+              value={joinDate}
+              onChange={(e) => setJoinDate(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Contact</label>
+            <label className="mb-1.5 block text-sm font-medium">Contact Information</label>
             <Input
               type="text"
-              name="contact"
-              value={form.contact}
-              onChange={handleChange}
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
               placeholder="Phone number or email"
             />
           </div>
@@ -234,9 +217,9 @@ function TeacherFormModal({
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || !form.name.trim()}>
+            <Button type="submit" disabled={saving || !name.trim()}>
               {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
-              {editing ? "Save Changes" : "Create Teacher"}
+              Create Teacher
             </Button>
           </DialogFooter>
         </form>
@@ -249,21 +232,12 @@ export default function TeachersPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth()
   const router = useRouter()
 
-  // Current server page of teachers — always driven by listTeachersPage.
+  // Teachers state
   const [pageTeachers, setPageTeachers] = React.useState<Teacher[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [success, setSuccess] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [debouncedQuery, setDebouncedQuery] = React.useState("")
-  const [lastLoaded, setLastLoaded] = React.useState<string | null>(null)
   const serverPg = useServerPagination(50)
-
-  // Debounce search input ~300ms before it drives a server refetch.
-  React.useEffect(() => {
-    const id = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
-    return () => clearTimeout(id)
-  }, [searchQuery])
 
   // Selection state
   const [selectedIds, setSelectedIds] = React.useState<number[]>([])
@@ -271,21 +245,49 @@ export default function TeachersPage() {
   const [bulkConfirmOpen, setBulkConfirmOpen] = React.useState(false)
   const [bulkModalOpen, setBulkModalOpen] = React.useState(false)
 
-  const [showForm, setShowForm] = React.useState(false)
-  const [editing, setEditing] = React.useState<Teacher | null>(null)
-  const [formInitial, setFormInitial] = React.useState<FormData>(EMPTY_FORM)
-  const [saving, setSaving] = React.useState(false)
+  // Create modal state
+  const [createModalOpen, setCreateModalOpen] = React.useState(false)
+  const [savingNewTeacher, setSavingNewTeacher] = React.useState(false)
+  const [createSchoolCode, setCreateSchoolCode] = React.useState<string>("HIS")
 
+  // Delete state
   const [deleting, setDeleting] = React.useState<Teacher | null>(null)
   const [deletingInProgress, setDeletingInProgress] = React.useState(false)
 
-  const [schoolCode, setSchoolCode] = React.useState<string>("HIS")
+  // Filters
+  const [typeFilter, setTypeFilter] = React.useState<string>("all")
+  const [schoolFilter, setSchoolFilter] = React.useState<string>("all")
 
+  // InspectorSheet state for Teacher (Telemetry vs Edit Profile)
+  const [inspectedTeacher, setInspectedTeacher] = React.useState<Teacher | null>(null)
+  const [inspectorMode, setInspectorMode] = React.useState<"telemetry" | "edit">("telemetry")
+
+  // In-drawer Edit Profile state
+  const [editName, setEditName] = React.useState("")
+  const [editSchoolCode, setEditSchoolCode] = React.useState("HIS")
+  const [editEmploymentType, setEditEmploymentType] = React.useState("")
+  const [editJoinDate, setEditJoinDate] = React.useState("")
+  const [editContact, setEditContact] = React.useState("")
+  const [savingEditProfile, setSavingEditProfile] = React.useState(false)
+
+  // Sync drawer edit form when inspected teacher changes
   React.useEffect(() => {
-    if (!success) return
-    const id = setTimeout(() => setSuccess(null), 4000)
+    if (inspectedTeacher) {
+      setEditName(inspectedTeacher.name)
+      setEditSchoolCode(inspectedTeacher.school_code)
+      setEditEmploymentType(inspectedTeacher.employment_type ?? "")
+      setEditJoinDate(
+        inspectedTeacher.join_date ? inspectedTeacher.join_date.slice(0, 10) : ""
+      )
+      setEditContact(inspectedTeacher.contact ?? "")
+    }
+  }, [inspectedTeacher])
+
+  // Debounce search
+  React.useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
     return () => clearTimeout(id)
-  }, [success])
+  }, [searchQuery])
 
   const getApi = React.useCallback(async () => {
     const token = await getToken()
@@ -293,8 +295,17 @@ export default function TeachersPage() {
     return createApi(token)
   }, [getToken])
 
-  const [typeFilter, setTypeFilter] = React.useState<string>("all")
-  const [schoolFilter, setSchoolFilter] = React.useState<string>("all")
+  const patchTeacherLocal = React.useCallback(
+    (id: number, patch: Partial<Teacher>) => {
+      setPageTeachers((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, ...patch } : t))
+      )
+      setInspectedTeacher((prev) =>
+        prev && prev.id === id ? { ...prev, ...patch } : prev
+      )
+    },
+    []
+  )
 
   const fetchPage = React.useCallback(async () => {
     const api = await getApi()
@@ -311,67 +322,36 @@ export default function TeachersPage() {
 
   const loadTeachers = React.useCallback(async () => {
     setLoading(true)
-    setError(null)
     setSelectedIds([])
     try {
       await fetchPage()
-      setLastLoaded(new Date().toLocaleTimeString())
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.userMessage)
-      } else {
-        setError(err instanceof Error ? err.message : "Failed to load teachers")
-      }
+      const msg = err instanceof ApiError ? err.userMessage : "Failed to load teachers"
+      toast.add({ title: msg, type: "error" })
     } finally {
       setLoading(false)
     }
   }, [fetchPage])
 
-  // Once data has been loaded at least once, keep the server page in sync:
-  // reset to page 1 when search/filter changes, and refetch whenever
-  // page/pageSize/search/filter change.
-  const filterKeyRef = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (lastLoaded === null) return
-    const filterKey = `${debouncedQuery}|${schoolFilter}|${typeFilter}`
-    const filterChanged = filterKeyRef.current !== null && filterKey !== filterKeyRef.current
-    filterKeyRef.current = filterKey
-    if (filterChanged && serverPg.page !== 1) {
-      serverPg.setPage(1)
-      return
+    if (isLoaded && isSignedIn) {
+      void loadTeachers()
     }
-    let cancelled = false
-    setLoading(true)
-    void fetchPage()
-      .catch((err) => {
-        if (cancelled) return
-        if (err instanceof ApiError) setError(err.userMessage)
-        else setError(err instanceof Error ? err.message : "Failed to load teachers")
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverPg.page, serverPg.pageSize, debouncedQuery, schoolFilter, typeFilter])
+  }, [isLoaded, isSignedIn, loadTeachers])
 
-  // Sorting (client-side; only sorts the current server page)
+  // Reset to page 1 on filter changes
+  const prevFilterRef = React.useRef<string>("")
+  React.useEffect(() => {
+    const current = `${debouncedQuery}|${schoolFilter}|${typeFilter}`
+    if (prevFilterRef.current && prevFilterRef.current !== current) {
+      serverPg.setPage(1)
+    }
+    prevFilterRef.current = current
+  }, [debouncedQuery, schoolFilter, typeFilter, serverPg])
+
+  // Sorting
   const { items: sortedTeachers, requestSort, sortConfig } = useSortableData(pageTeachers, "id", "asc")
   const displayedTeachers = sortedTeachers
-
-  const tablePagination = {
-    currentPage: serverPg.page,
-    totalPages: serverPg.totalPages,
-    totalItems: serverPg.totalItems,
-    startIndex: serverPg.startIndex,
-    endIndex: serverPg.endIndex,
-    pageSize: serverPg.pageSize,
-    onPageChange: serverPg.setPage,
-    onPageSizeChange: serverPg.setPageSize,
-  }
-
   const totalTeachersCount = serverPg.totalItems
 
   // Selection handlers
@@ -396,94 +376,92 @@ export default function TeachersPage() {
     )
   }
 
-  const handleBulkDelete = React.useCallback(async () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return
     setBulkDeleting(true)
-    setError(null)
     try {
       const api = await getApi()
       const res = await api.bulkDeleteTeachers(selectedIds)
-      setSuccess(`Successfully deleted ${res.deleted_count} teacher(s).`)
+      toast.add({ title: `Deleted ${res.deleted_count} teacher(s).`, type: "success" })
       setSelectedIds([])
       setBulkConfirmOpen(false)
       await fetchPage()
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.userMessage)
-      } else {
-        setError(err instanceof Error ? err.message : "An unexpected error occurred during bulk delete")
-      }
+      const msg = err instanceof ApiError ? err.userMessage : "Bulk delete failed"
+      toast.add({ title: msg, type: "error" })
     } finally {
       setBulkDeleting(false)
     }
-  }, [getApi, selectedIds, fetchPage])
-
-  const openAddModal = () => {
-    setEditing(null)
-    setFormInitial({ ...EMPTY_FORM, join_date: toLocalDateString() })
-    setSchoolCode("HIS")
-    setShowForm(true)
   }
 
-  const openEditModal = (teacher: Teacher) => {
-    setEditing(teacher)
-    setFormInitial({
-      name: teacher.name,
-      employment_type: teacher.employment_type ?? "",
-      join_date: teacher.join_date ? teacher.join_date.slice(0, 10) : "",
-      contact: teacher.contact ?? "",
-    })
-    setSchoolCode(teacher.school_code)
-    setShowForm(true)
-  }
+  const handleSaveDrawerProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inspectedTeacher || !editName.trim()) return
 
-  const closeFormModal = () => {
-    setShowForm(false)
-    setEditing(null)
-  }
+    setSavingEditProfile(true)
+    const payload: TeacherPayload = {
+      name: editName.trim(),
+      school_code: editSchoolCode,
+      employment_type:
+        editEmploymentType === "" || editEmploymentType === "none"
+          ? null
+          : (editEmploymentType as TeacherPayload["employment_type"]),
+      join_date: editJoinDate || null,
+      contact: editContact.trim() || null,
+    }
 
-  const handleSave = async (payload: TeacherPayload) => {
-    setSaving(true)
-    setError(null)
     try {
       const api = await getApi()
-      if (editing) {
-        await api.updateTeacher(editing.id, payload)
-        setSuccess(`Teacher "${payload.name}" updated successfully.`)
-      } else {
-        await api.createTeacher(payload)
-        setSuccess(`Teacher "${payload.name}" created successfully.`)
-      }
-      closeFormModal()
+      const updated = await api.updateTeacher(inspectedTeacher.id, payload)
+      patchTeacherLocal(inspectedTeacher.id, {
+        name: updated.name,
+        school_code: updated.school_code,
+        employment_type: updated.employment_type,
+        join_date: updated.join_date,
+        contact: updated.contact,
+      })
+      toast.add({
+        title: `Faculty profile for "${updated.name}" updated successfully.`,
+        type: "success",
+      })
+      setInspectorMode("telemetry")
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.userMessage : "Failed to save teacher"
+      toast.add({ title: msg, type: "error" })
+    } finally {
+      setSavingEditProfile(false)
+    }
+  }
+
+  const handleSaveNewTeacher = async (payload: TeacherPayload) => {
+    setSavingNewTeacher(true)
+    try {
+      const api = await getApi()
+      await api.createTeacher(payload)
+      toast.add({ title: `Teacher "${payload.name}" created.`, type: "success" })
+      setCreateModalOpen(false)
       await fetchPage()
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.userMessage)
-      } else {
-        setError(err instanceof Error ? err.message : "An unexpected error occurred")
-      }
+      const msg = err instanceof ApiError ? err.userMessage : "Failed to save teacher"
+      toast.add({ title: msg, type: "error" })
     } finally {
-      setSaving(false)
+      setSavingNewTeacher(false)
     }
   }
 
   const handleDeleteConfirm = async () => {
     if (!deleting) return
     setDeletingInProgress(true)
-    setError(null)
     try {
       const api = await getApi()
       await api.deleteTeacher(deleting.id)
-      setSuccess(`Teacher "${deleting.name}" deleted.`)
+      toast.add({ title: `Teacher "${deleting.name}" deleted.`, type: "success" })
       setSelectedIds((prev) => prev.filter((id) => id !== deleting.id))
       setDeleting(null)
       await fetchPage()
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.userMessage)
-      } else {
-        setError(err instanceof Error ? err.message : "An unexpected error occurred")
-      }
+      const msg = err instanceof ApiError ? err.userMessage : "Failed to delete teacher"
+      toast.add({ title: msg, type: "error" })
     } finally {
       setDeletingInProgress(false)
     }
@@ -491,360 +469,613 @@ export default function TeachersPage() {
 
   if (!isLoaded) {
     return (
-      <div className="container mx-auto max-w-7xl px-4 pb-6 sm:px-6 md:px-8 md:pb-8">
-        <div className="mb-8 h-8 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="mb-6 h-4 w-72 animate-pulse rounded-lg bg-muted" />
-        <div className="rounded-xl border p-6 space-y-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-6 w-full animate-pulse rounded-md bg-muted" />
-          ))}
-        </div>
+      <div className="space-y-4 p-4 sm:p-6">
+        <div className="h-28 w-full animate-pulse rounded-sm border bg-card" />
+        <div className="h-96 w-full animate-pulse rounded-sm border bg-card" />
       </div>
     )
   }
 
   if (!isSignedIn) {
     return (
-      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
-        <p className="text-muted-foreground font-medium">Please sign in to view teachers.</p>
+      <div className="flex min-h-[50vh] flex-col items-center justify-center p-6 text-center">
+        <p className="font-mono text-sm text-muted-foreground">
+          Please sign in to view the Faculty Directory.
+        </p>
       </div>
     )
   }
 
   return (
-    <StaggerContainer className="space-y-6">
-      {/* Standardized Header */}
-      <StaggerItem>
-        <StandardPageHeader
-          title="Teachers"
-          primaryAction={{
-            label: "Add Teacher",
-            onClick: openAddModal,
-            icon: <Plus className="size-4" />,
-          }}
-          secondaryAction={buildReloadAction({
-            hasLoaded: lastLoaded !== null,
-            loading,
-            onClick: loadTeachers,
-          })}
-        >
+    <div className="space-y-4 p-4 sm:p-6">
+      {/* 1. Tactical System Header with Directory Unified Tabs */}
+      <SystemHeader
+        domain="DIRECTORY"
+        breadcrumb="FACULTY"
+        title="Student & Faculty Directory"
+        description="Unified directory for student enrollment records, campus QR passes, and faculty profiles."
+        metrics={[
+          { label: "TOTAL FACULTY", value: totalTeachersCount },
+          { label: "CURRENT PAGE", value: displayedTeachers.length },
+        ]}
+        tabs={[
+          { id: "students", label: "Students" },
+          { id: "teachers", label: "Teachers / Faculty", count: totalTeachersCount },
+        ]}
+        activeTab="teachers"
+        onTabChange={(id) => {
+          if (id === "students") router.push("/students")
+        }}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkModalOpen(true)}
+              className="rounded-sm font-mono text-xs uppercase"
+            >
+              <Upload className="mr-1.5 size-3.5" />
+              Import CSV
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setCreateSchoolCode("HIS")
+                setCreateModalOpen(true)
+              }}
+              className="rounded-sm font-mono text-xs uppercase"
+            >
+              <Plus className="mr-1.5 size-3.5" />
+              Add Teacher
+            </Button>
+          </div>
+        }
+      />
+
+      {/* 2. Teachers DataModule */}
+      <DataModule
+        searchPlaceholder="Search faculty by name or unique ID..."
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        filters={
+          <>
+            {/* School Code Selector */}
+            <Select
+              value={schoolFilter}
+              onValueChange={(val) => setSchoolFilter(val ?? "all")}
+            >
+              <SelectTrigger className="h-8 min-w-[160px] max-w-[220px] rounded-sm border-border bg-background font-mono text-xs">
+                <span className="truncate">
+                  {schoolFilter === "all"
+                    ? "All Schools"
+                    : (SCHOOL_CODES.find((sc) => sc.value === schoolFilter)
+                        ? `${schoolFilter} — ${SCHOOL_CODES.find((sc) => sc.value === schoolFilter)?.label}`
+                        : schoolFilter)}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Schools</SelectItem>
+                {SCHOOL_CODES.map((sc) => (
+                  <SelectItem key={sc.value} value={sc.value}>
+                    {sc.value} — {sc.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Employment Type Selector */}
+            <Select
+              value={typeFilter}
+              onValueChange={(val) => setTypeFilter(val ?? "all")}
+            >
+              <SelectTrigger className="h-8 min-w-[170px] max-w-[240px] rounded-sm border-border bg-background font-mono text-xs">
+                <span className="truncate">
+                  {typeFilter === "all"
+                    ? "All Employment Types"
+                    : (EMPLOYMENT_TYPES.find((t) => t.value === typeFilter)?.label ?? typeFilter)}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employment Types</SelectItem>
+                {EMPLOYMENT_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        }
+        selectedCount={selectedIds.length}
+        onClearSelection={() => setSelectedIds([])}
+        bulkActions={
+          <Button
+            variant="destructive"
+            size="xs"
+            onClick={() => setBulkConfirmOpen(true)}
+            className="h-6 rounded-sm px-2 font-mono text-[11px] uppercase"
+          >
+            <Trash2 className="mr-1 size-3" />
+            Delete ({selectedIds.length})
+          </Button>
+        }
+        toolbarRight={
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => setBulkModalOpen(true)}
-            className="gap-1.5"
+            size="xs"
+            onClick={() => void loadTeachers()}
+            disabled={loading}
+            className="h-7 rounded-sm font-mono text-[11px] uppercase"
           >
-            <Upload className="size-4" />
-            Import CSV
+            <RotateCcw className={cn("mr-1 size-3", loading && "animate-spin")} />
+            Refresh
           </Button>
-        </StandardPageHeader>
-      </StaggerItem>
-
-      {/* Metric Highlights Strip */}
-      <StaggerItem>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Teachers</p>
-              <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <UserCheck className="size-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">{totalTeachersCount}</h2>
-              {lastLoaded && (
-                <span className="text-[11px] text-muted-foreground">Updated {lastLoaded}</span>
-              )}
-            </div>
-          </Card>
-        </div>
-      </StaggerItem>
-
-      {/* Standardized Management Toolbar Card */}
-      <StaggerItem>
-        <Card className="p-4 mb-6 shadow-2xs border-border/80 bg-card">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-            <div className="flex flex-1 items-center gap-3 max-w-lg">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search teachers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+        }
+        totalCount={totalTeachersCount}
+        countLabel="FACULTY"
+        page={serverPg.page}
+        totalPages={serverPg.totalPages}
+        onPageChange={serverPg.setPage}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow className="h-9 bg-muted/20 hover:bg-muted/20">
+              <TableHead className="w-10 px-3 text-center">
+                <Checkbox
+                  checked={allCurrentPageSelected}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all faculty on page"
                 />
-              </div>
-
-              <Select value={schoolFilter} onValueChange={(val) => setSchoolFilter(val ?? "all")}>
-                <SelectTrigger className="w-32 text-xs">
-                  <SelectValue>
-                    {schoolFilter === "all" ? "All Schools" : schoolFilter}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Schools</SelectItem>
-                  {SCHOOL_CODES.map((sc) => (
-                    <SelectItem key={sc.value} value={sc.value}>
-                      {sc.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={typeFilter} onValueChange={(val) => setTypeFilter(val ?? "all")}>
-                <SelectTrigger className="w-36 text-xs">
-                  <SelectValue>
-                    {typeFilter === "all" ? "All Types" : (EMPLOYMENT_TYPES.find((t) => t.value === typeFilter)?.label ?? typeFilter)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  {EMPLOYMENT_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              {selectedIds.length > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkConfirmOpen(true)}
-                  className="gap-1.5"
-                >
-                  <Trash2 className="size-4" />
-                  Delete Selected ({selectedIds.length})
-                </Button>
-              )}
-
-              {lastLoaded && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="px-3 py-1 text-xs">
-                    <UserCheck className="mr-1.5 size-3.5" />
-                    {`${totalTeachersCount} teacher${totalTeachersCount !== 1 ? "s" : ""}`}
-                  </Badge>
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-      </StaggerItem>
-
-      {/* Banners */}
-      {success && (
-        <div className="mb-6 flex items-center justify-between rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
-          <span>{success}</span>
-          <Button size="xs" variant="ghost" onClick={() => setSuccess(null)}>
-            Dismiss
-          </Button>
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-6 flex items-center justify-between rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <span>{error}</span>
-          <Button size="xs" variant="ghost" onClick={() => setError(null)}>
-            Dismiss
-          </Button>
-        </div>
-      )}
-
-      {/* Floating Table Card */}
-      <StaggerItem>
-        <TableRevealProvider>
-        {tablePagination.totalItems > 0 && (
-          <StandardTablePagination
-            currentPage={tablePagination.currentPage}
-            totalPages={tablePagination.totalPages}
-            totalItems={tablePagination.totalItems}
-            startIndex={tablePagination.startIndex}
-            endIndex={tablePagination.endIndex}
-            pageSize={tablePagination.pageSize}
-            onPageChange={tablePagination.onPageChange}
-            onPageSizeChange={tablePagination.onPageSizeChange}
-            loading={loading}
-            placement="top"
-            className="mb-4"
-          />
-        )}
-        <TooltipProvider>
-          <Card className="rounded-xl border border-border/80 bg-card shadow-2xs overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12 text-center">
-                    <Checkbox
-                      checked={allCurrentPageSelected}
-                      onCheckedChange={toggleSelectAll}
-                      aria-label="Select all current page"
-                    />
-                  </TableHead>
-
-                  <TableHeadSortable
-                    className="min-w-[130px]"
-                    sortKey="unique_code"
-                    currentSortKey={sortConfig.key}
-                    currentSortOrder={sortConfig.order}
-                    onSort={requestSort}
-                  >
-                    Identifier
-                  </TableHeadSortable>
-
-                  <TableHeadSortable
-                    className="min-w-[90px]"
-                    sortKey="school_code"
-                    currentSortKey={sortConfig.key}
-                    currentSortOrder={sortConfig.order}
-                    onSort={requestSort}
-                  >
-                    School
-                  </TableHeadSortable>
-
-                  <TableHeadSortable
-                    className="min-w-[140px]"
-                    sortKey="name"
-                    currentSortKey={sortConfig.key}
-                    currentSortOrder={sortConfig.order}
-                    onSort={requestSort}
-                  >
-                    Name
-                  </TableHeadSortable>
-
-                  <TableHeadSortable
-                    className="min-w-[100px]"
-                    sortKey="employment_type"
-                    currentSortKey={sortConfig.key}
-                    currentSortOrder={sortConfig.order}
-                    onSort={requestSort}
-                  >
-                    Type
-                  </TableHeadSortable>
-
-                  <TableHeadSortable
-                    className="min-w-[130px]"
-                    sortKey="contact"
-                    currentSortKey={sortConfig.key}
-                    currentSortOrder={sortConfig.order}
-                    onSort={requestSort}
-                  >
-                    Contact
-                  </TableHeadSortable>
-
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <AnimatedTableBody
-                loading={loading}
-                hasData={displayedTeachers.length > 0}
-                rowCount={Math.min(serverPg.pageSize, 8)}
-                skeletonRowCount={Math.min(serverPg.pageSize, 8)}
-                colSpan={7}
-                skeleton={
-                  <TeacherTableSkeletonRows rows={Math.min(serverPg.pageSize, 8)} />
-                }
-                idle={lastLoaded === null}
-                idleTitle="No teachers loaded yet"
-                idleDescription="Use Load Data in the toolbar to fetch the teacher list."
-                emptyTitle="No teachers found"
-                emptyDescription="Try adjusting search or filters, then load again."
+              </TableHead>
+              <TableHeadSortable
+                className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                sortKey="unique_code"
+                currentSortKey={sortConfig.key}
+                currentSortOrder={sortConfig.order}
+                onSort={requestSort}
               >
-                {displayedTeachers.map((t) => {
-                  const isSelected = selectedIds.includes(t.id)
-                  return (
-                    <TableRow key={t.id} data-state={isSelected ? "selected" : undefined} className="cursor-pointer" onClick={() => router.push(`/teachers/${t.id}/`)}>
-                      <TableCell className="text-center" onClick={(event) => event.stopPropagation()}>
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleSelectRow(t.id)}
-                          aria-label={`Select teacher ${t.name}`}
-                        />
-                      </TableCell>
-                      <TableCell className="font-semibold text-foreground">{t.unique_code}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{t.school_code}</Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[180px]">
-                        <TruncatedContent value={t.name} className="font-semibold text-foreground" />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {EMPLOYMENT_TYPES.find((et) => et.value === t.employment_type)?.label ?? t.employment_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[140px]">
-                        <TruncatedContent value={t.contact} />
-                      </TableCell>
-                      <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openEditModal(t)}
-                            title="Edit"
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleting(t)}
-                            title="Delete"
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                Identifier
+              </TableHeadSortable>
+              <TableHeadSortable
+                className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                sortKey="name"
+                currentSortKey={sortConfig.key}
+                currentSortOrder={sortConfig.order}
+                onSort={requestSort}
+              >
+                Teacher Name
+              </TableHeadSortable>
+              <TableHeadSortable
+                className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                sortKey="school_code"
+                currentSortKey={sortConfig.key}
+                currentSortOrder={sortConfig.order}
+                onSort={requestSort}
+              >
+                School
+              </TableHeadSortable>
+              <TableHeadSortable
+                className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                sortKey="employment_type"
+                currentSortKey={sortConfig.key}
+                currentSortOrder={sortConfig.order}
+                onSort={requestSort}
+              >
+                Employment Type
+              </TableHeadSortable>
+              <TableHead className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                Contact
+              </TableHead>
+              <TableHead className="text-right font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 8 }).map((_, idx) => (
+                <TableRow key={idx} className="h-10">
+                  <TableCell colSpan={7} className="px-3.5">
+                    <div className="h-4 w-full animate-pulse rounded bg-muted/40" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : displayedTeachers.length === 0 ? (
+              <TableRow className="h-24">
+                <TableCell
+                  colSpan={7}
+                  className="text-center font-mono text-xs text-muted-foreground"
+                >
+                  No faculty found matching your filter criteria.
+                </TableCell>
+              </TableRow>
+            ) : (
+              displayedTeachers.map((teacher) => {
+                const isSelected = selectedIds.includes(teacher.id)
+                const isFullTime = teacher.employment_type === "full_time"
+                const typeLabel =
+                  EMPLOYMENT_TYPES.find((et) => et.value === teacher.employment_type)?.label ??
+                  teacher.employment_type ??
+                  "NONE"
+
+                return (
+                  <TableRow
+                    key={teacher.id}
+                    data-state={isSelected ? "selected" : undefined}
+                    onClick={() => {
+                      setInspectedTeacher(teacher)
+                      setInspectorMode("telemetry")
+                    }}
+                    className="h-10 cursor-pointer hover:bg-muted/30"
+                  >
+                    <TableCell
+                      className="w-10 px-3 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelectRow(teacher.id)}
+                        aria-label={`Select teacher ${teacher.name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="px-3.5 font-mono">
+                      <CodeChip accent>{teacher.unique_code}</CodeChip>
+                    </TableCell>
+                    <TableCell className="text-xs font-semibold text-foreground">
+                      {teacher.name}
+                    </TableCell>
+                    <TableCell>
+                      <CodeChip>{teacher.school_code}</CodeChip>
+                    </TableCell>
+                    <TableCell>
+                      <TelemetryTag status={isFullTime ? "active" : "neutral"}>
+                        {typeLabel.toUpperCase()}
+                      </TelemetryTag>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {teacher.contact || "—"}
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => {
+                            setInspectedTeacher(teacher)
+                            setInspectorMode("telemetry")
+                          }}
+                          className="h-7 font-mono text-[11px] uppercase"
+                        >
+                          Inspect
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => setDeleting(teacher)}
+                          className="text-destructive hover:text-destructive"
+                          title="Delete Faculty Profile"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </DataModule>
+
+      {/* 3. Consolidated Slide-Over Teacher Inspector Sheet */}
+      <InspectorSheet
+        open={Boolean(inspectedTeacher)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInspectedTeacher(null)
+            setInspectorMode("telemetry")
+          }
+        }}
+        code={inspectedTeacher?.unique_code}
+        title={inspectedTeacher?.name ?? ""}
+        subtitle={
+          inspectorMode === "telemetry"
+            ? "Faculty Profile & Teaching Telemetry"
+            : "Edit Faculty Profile & Employment Stream"
+        }
+        status={
+          inspectedTeacher
+            ? {
+                label: inspectedTeacher.employment_type
+                  ? inspectedTeacher.employment_type.toUpperCase().replace("_", " ")
+                  : "FACULTY",
+                tone:
+                  inspectedTeacher.employment_type === "full_time"
+                    ? "active"
+                    : "neutral",
+              }
+            : undefined
+        }
+        footerActions={
+          inspectedTeacher ? (
+            inspectorMode === "telemetry" ? (
+              <div className="flex w-full items-center justify-between gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInspectedTeacher(null)}
+                  className="font-mono text-xs uppercase"
+                >
+                  Close
+                </Button>
+                <Link
+                  href={`/teachers/${inspectedTeacher.id}/`}
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "default" }),
+                    "font-mono text-xs uppercase"
+                  )}
+                >
+                  Full Profile →
+                </Link>
+              </div>
+            ) : (
+              <div className="flex w-full items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInspectorMode("telemetry")}
+                  disabled={savingEditProfile}
+                  className="font-mono text-xs uppercase"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  form="inspector-teacher-edit-form"
+                  size="sm"
+                  disabled={savingEditProfile || !editName.trim()}
+                  className="font-mono text-xs uppercase"
+                >
+                  {savingEditProfile && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                  Save Changes
+                </Button>
+              </div>
+            )
+          ) : null
+        }
+      >
+        {inspectedTeacher && (
+          <div className="space-y-4">
+            {/* Sub-mode switcher bar inside drawer */}
+            <div className="flex items-center gap-1 rounded-sm border border-border bg-muted/40 p-1 font-mono text-xs">
+              <button
+                type="button"
+                onClick={() => setInspectorMode("telemetry")}
+                className={cn(
+                  "flex-1 rounded-sm py-1.5 text-center font-semibold uppercase transition-colors",
+                  inspectorMode === "telemetry"
+                    ? "bg-foreground text-background shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Faculty Profile
+              </button>
+              <button
+                type="button"
+                onClick={() => setInspectorMode("edit")}
+                className={cn(
+                  "flex-1 rounded-sm py-1.5 text-center font-semibold uppercase transition-colors",
+                  inspectorMode === "edit"
+                    ? "bg-foreground text-background shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Edit Profile
+              </button>
+            </div>
+
+            {/* Mode 1: Faculty Telemetry View */}
+            {inspectorMode === "telemetry" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between rounded-sm border border-border bg-muted/20 p-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-foreground">
+                      Faculty Timetable & Workload
+                    </div>
+                    <div className="font-mono text-[11px] text-muted-foreground">
+                      Access assigned courses, lesson occurrences, and substitute coverage history.
+                    </div>
+                  </div>
+                  <Link
+                    href={`/teachers/${inspectedTeacher.id}/`}
+                    className={cn(
+                      buttonVariants({ size: "xs", variant: "outline" }),
+                      "font-mono text-[11px] uppercase shrink-0"
+                    )}
+                  >
+                    Timetable →
+                  </Link>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <span className="size-1.5 rounded-[1px] bg-primary" />
+                    TELEMETRY ATTRIBUTES
+                  </div>
+                  <div className="divide-y divide-border/60 border-t border-b border-border/60">
+                    {[
+                      {
+                        label: "TEACHER ID",
+                        value: inspectedTeacher.unique_code,
+                        mono: true,
+                      },
+                      {
+                        label: "SCHOOL CODE",
+                        value: inspectedTeacher.school_code,
+                        mono: true,
+                      },
+                      {
+                        label: "EMPLOYMENT TYPE",
+                        value:
+                          EMPLOYMENT_TYPES.find(
+                            (t) => t.value === inspectedTeacher.employment_type
+                          )?.label ??
+                          inspectedTeacher.employment_type ??
+                          "None",
+                        mono: false,
+                      },
+                      {
+                        label: "JOIN DATE",
+                        value: inspectedTeacher.join_date
+                          ? inspectedTeacher.join_date.slice(0, 10)
+                          : "—",
+                        mono: true,
+                      },
+                      {
+                        label: "CONTACT",
+                        value: inspectedTeacher.contact || "—",
+                        mono: true,
+                      },
+                    ].map((field, idx) => (
+                      <div
+                        key={`${field.label}-${idx}`}
+                        className="grid grid-cols-[130px_1fr] items-center gap-3 border-b border-border/60 py-2 text-xs last:border-b-0"
+                      >
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                          {field.label}
+                        </span>
+                        <div
+                          className={cn(
+                            "text-right font-medium text-foreground break-words",
+                            field.mono && "font-mono tabular-nums"
+                          )}
+                        >
+                          {field.value}
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </AnimatedTableBody>
-            </Table>
-          </Card>
-        </TooltipProvider>
-        {tablePagination.totalItems > 0 && (
-          <StandardTablePagination
-            currentPage={tablePagination.currentPage}
-            totalPages={tablePagination.totalPages}
-            totalItems={tablePagination.totalItems}
-            startIndex={tablePagination.startIndex}
-            endIndex={tablePagination.endIndex}
-            pageSize={tablePagination.pageSize}
-            onPageChange={tablePagination.onPageChange}
-            onPageSizeChange={tablePagination.onPageSizeChange}
-            loading={loading}
-            placement="bottom"
-            className="mt-4"
-          />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mode 2: In-Drawer Edit Profile Form */}
+            {inspectorMode === "edit" && (
+              <form
+                id="inspector-teacher-edit-form"
+                onSubmit={handleSaveDrawerProfile}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    School Stream <span className="text-destructive">*</span>
+                  </label>
+                  <Select
+                    value={editSchoolCode}
+                    onValueChange={(val) => val && setEditSchoolCode(val)}
+                  >
+                    <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                      <span className="truncate">
+                        {SCHOOL_CODES.find((sc) => sc.value === editSchoolCode)
+                          ? `${editSchoolCode} — ${SCHOOL_CODES.find((sc) => sc.value === editSchoolCode)?.label}`
+                          : editSchoolCode}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SCHOOL_CODES.map((sc) => (
+                        <SelectItem key={sc.value} value={sc.value}>
+                          {sc.value} — {sc.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Full Name <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    required
+                    placeholder="e.g. Daw Su Su"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Employment Type
+                  </label>
+                  <Select
+                    value={editEmploymentType || "none"}
+                    onValueChange={(val) =>
+                      setEditEmploymentType(!val || val === "none" ? "" : val)
+                    }
+                  >
+                    <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                      <span className="truncate">
+                        {editEmploymentType
+                          ? (EMPLOYMENT_TYPES.find((et) => et.value === editEmploymentType)?.label ?? editEmploymentType)
+                          : "None / Unassigned"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None / Unassigned</SelectItem>
+                      {EMPLOYMENT_TYPES.map((et) => (
+                        <SelectItem key={et.value} value={et.value}>
+                          {et.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Join Date</label>
+                  <Input
+                    type="date"
+                    value={editJoinDate}
+                    onChange={(e) => setEditJoinDate(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Contact Information</label>
+                  <Input
+                    type="text"
+                    value={editContact}
+                    onChange={(e) => setEditContact(e.target.value)}
+                    placeholder="Phone number or email"
+                  />
+                </div>
+              </form>
+            )}
+          </div>
         )}
-        </TableRevealProvider>
-      </StaggerItem>
+      </InspectorSheet>
 
-      {/* Form modal */}
-      {showForm && (
-        <TeacherFormModal
-          editing={editing}
-          initial={formInitial}
-          onSave={handleSave}
-          onClose={closeFormModal}
-          saving={saving}
-          schoolCode={schoolCode}
-          onSchoolCodeChange={setSchoolCode}
-        />
-      )}
+      {/* 4. Teacher Creation Modal */}
+      <TeacherCreateModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSave={handleSaveNewTeacher}
+        saving={savingNewTeacher}
+        schoolCode={createSchoolCode}
+        setSchoolCode={setCreateSchoolCode}
+      />
 
-      {/* Single Delete dialog */}
       <ConfirmDialog
         open={deleting !== null}
-        title="Delete Teacher"
+        title="Delete Teacher Profile"
         description={
           deleting
-            ? `Are you sure you want to delete ${deleting.name}? This action cannot be undone.`
+            ? `Are you sure you want to delete ${deleting.name}? This will remove their faculty assignment across all subjects.`
             : ""
         }
         onConfirm={handleDeleteConfirm}
@@ -852,17 +1083,16 @@ export default function TeachersPage() {
         loading={deletingInProgress}
       />
 
-      {/* Bulk Delete dialog */}
       <ConfirmDialog
         open={bulkConfirmOpen}
-        title="Delete Multiple Teachers"
+        title="Bulk Delete Teachers"
         description={`Are you sure you want to delete ${selectedIds.length} selected teacher(s)? This action cannot be undone.`}
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkConfirmOpen(false)}
         loading={bulkDeleting}
       />
 
-      {bulkModalOpen ? (
+      {bulkModalOpen && (
         <BulkImportModal
           open={bulkModalOpen}
           onClose={() => setBulkModalOpen(false)}
@@ -872,11 +1102,11 @@ export default function TeachersPage() {
             return api.bulkCreateTeachers(items)
           }}
           onSuccess={(count) => {
-            setSuccess(`Successfully imported ${count} teacher(s).`)
-            loadTeachers()
+            toast.add({ title: `Successfully imported ${count} teacher(s).`, type: "success" })
+            void loadTeachers()
           }}
         />
-      ) : null}
-    </StaggerContainer>
+      )}
+    </div>
   )
 }
