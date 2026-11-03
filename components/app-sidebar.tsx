@@ -68,32 +68,79 @@ import { useCurrentUser } from "@/components/current-user-provider"
 import { HintharMark } from "@/components/hinthar-mark"
 import { canCheckIn, isAdmin, isStaffOrAbove } from "@/lib/roles"
 import { Badge } from "@/components/ui/badge"
-const overviewItems = [
-  { title: "Dashboard", url: "/overview", icon: LayoutDashboard },
+import { cn } from "@/lib/utils"
+
+const staffWorkspaces = [
+  {
+    title: "Overview",
+    url: "/overview",
+    icon: LayoutDashboard,
+    isActive: (pathname: string) =>
+      pathname === "/overview" || pathname.startsWith("/overview/"),
+  },
+  {
+    title: "Check-In",
+    url: "/check-in",
+    icon: QrCode,
+    isActive: (pathname: string) =>
+      pathname === "/check-in" || pathname.startsWith("/check-in/"),
+  },
+  {
+    title: "Attendance",
+    url: "/attendance",
+    icon: ClipboardCheck,
+    isActive: (pathname: string) =>
+      pathname === "/attendance" || pathname.startsWith("/attendance/"),
+  },
+  {
+    title: "Schedule",
+    url: "/schedule",
+    icon: Calendar,
+    isActive: (pathname: string) =>
+      pathname === "/schedule" ||
+      pathname.startsWith("/schedule/") ||
+      pathname === "/timetable" ||
+      pathname.startsWith("/timetable/") ||
+      pathname === "/sessions" ||
+      pathname.startsWith("/sessions/"),
+  },
+  {
+    title: "Academics",
+    url: "/classes",
+    icon: GraduationCap,
+    isActive: (pathname: string) =>
+      pathname === "/classes" ||
+      pathname.startsWith("/classes/") ||
+      pathname === "/subjects" ||
+      pathname.startsWith("/subjects/"),
+  },
+  {
+    title: "Directory",
+    url: "/students",
+    icon: Users,
+    isActive: (pathname: string) =>
+      pathname === "/students" ||
+      pathname.startsWith("/students/") ||
+      pathname === "/teachers" ||
+      pathname.startsWith("/teachers/"),
+  },
+  {
+    title: "Communications",
+    url: "/communications",
+    icon: Megaphone,
+    isActive: (pathname: string) =>
+      pathname === "/communications" ||
+      pathname.startsWith("/communications/") ||
+      pathname === "/announcements" ||
+      pathname.startsWith("/announcements/") ||
+      pathname === "/events" ||
+      pathname.startsWith("/events/"),
+  },
 ]
 
 const schoolItems = [
   { title: "Announcements", url: "/announcements", icon: Megaphone },
   { title: "Events", url: "/events", icon: CalendarDays },
-]
-
-const schoolStaffItems = [
-  ...schoolItems,
-  { title: "Manage events", url: "/events/manage", icon: Settings2 },
-]
-
-const managementItems = [
-  { title: "Classes", url: "/classes", icon: GraduationCap },
-  { title: "Teachers", url: "/teachers", icon: UserCheck },
-  { title: "Students", url: "/students", icon: Users },
-  { title: "Subjects", url: "/subjects", icon: BookOpen },
-]
-
-const operationsItems = [
-  { title: "Sessions", url: "/sessions", icon: Clock },
-  { title: "Find sessions", url: "/sessions/find", icon: Search },
-  { title: "Timetables", url: "/timetable", icon: Calendar },
-  { title: "Session Attendance", url: "/attendance", icon: ClipboardCheck },
 ]
 
 const userSubItems = [
@@ -132,13 +179,6 @@ function isUsersSubItemActive(pathname: string, url: string) {
   return pathname === url || pathname === `${url}/` || pathname.startsWith(`${url}/`)
 }
 
-const checkInSubItemsStaff = [
-  { title: "Overview", url: "/check-in/overview", icon: LayoutDashboard },
-  { title: "Management", url: "/check-in/management", icon: QrCode },
-  { title: "Corrections", url: "/check-in/corrections", icon: Undo2 },
-  { title: "Terminal", url: "/check-in/terminal", icon: Monitor },
-]
-
 const checkInSubItemsTerminal = [
   { title: "Terminal", url: "/check-in/terminal", icon: Monitor },
 ]
@@ -149,9 +189,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { openUserProfile, signOut } = useClerk()
   const { role, user: account, loading: accountLoading } = useCurrentUser()
   const { isMobile, setOpenMobile } = useSidebar()
-  const [checkInOpen, setCheckInOpen] = React.useState(() => pathname.startsWith("/check-in"))
   const [usersOpen, setUsersOpen] = React.useState(() => isUsersSectionPath(pathname))
-  const checkInExpanded = pathname.startsWith("/check-in") || checkInOpen
   const usersExpanded = isUsersSectionPath(pathname) || usersOpen
 
   const accountLocked = !accountLoading && account?.is_active === false
@@ -160,7 +198,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const showStudentNav = !accountLocked && !accountLoading && role === "student"
   const showTeacherNav = !accountLocked && !accountLoading && role === "teacher"
   const showTerminalNav = !accountLocked && !accountLoading && canCheckIn(role) && !showStaffNav
-  const checkInSubItems = showStaffNav ? checkInSubItemsStaff : checkInSubItemsTerminal
   const unmatchedStudent = role === "student" && account?.student_profile_id == null
   const unmatchedTeacher = role === "teacher" && account?.teacher_profile_id == null
   const waitingForLink = role === "pending" || unmatchedStudent || unmatchedTeacher
@@ -213,15 +250,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar
       collapsible="icon"
-      variant="inset"
+      variant="sidebar"
+      className="border-r border-border"
       {...props}
     >
       {/* Brand Header */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent" render={<Link href={homeHref} onClick={handleNavClick} />}>
-              <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent rounded-sm" render={<Link href={homeHref} onClick={handleNavClick} />}>
+              <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-sm bg-sidebar-primary text-sidebar-primary-foreground">
                 <HintharMark className="size-5" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -238,113 +276,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {showStaffNav ? (
           <>
             <SidebarGroup>
-              <SidebarGroupLabel>Overview</SidebarGroupLabel>
+              <SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Workspaces</SidebarGroupLabel>
               <SidebarMenu>
-                {overviewItems.map((item) => {
-                  const isActive = pathname === item.url
+                {staffWorkspaces.map((item) => {
+                  const active = item.isActive(pathname)
                   return (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton tooltip={item.title} isActive={isActive} render={<Link href={item.url} onClick={handleNavClick} />}>
-                        <item.icon />
+                      <SidebarMenuButton
+                        tooltip={item.title}
+                        isActive={active}
+                        render={<Link href={item.url} onClick={handleNavClick} />}
+                        className={cn(
+                          "rounded-sm transition-colors",
+                          active && "font-semibold bg-sidebar-accent text-sidebar-accent-foreground"
+                        )}
+                      >
+                        <item.icon className="size-4" />
                         <span>{item.title}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )
                 })}
-              </SidebarMenu>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>School</SidebarGroupLabel>
-              <SidebarMenu>
-                {schoolStaffItems.map((item) => {
-                  const isActive =
-                    pathname === item.url ||
-                    pathname === `${item.url}/` ||
-                    pathname.startsWith(`${item.url}/`)
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton tooltip={item.title} isActive={isActive} render={<Link href={item.url} onClick={handleNavClick} />}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>Management</SidebarGroupLabel>
-              <SidebarMenu>
-                {managementItems.map((item) => {
-                  const isActive = pathname === item.url
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton tooltip={item.title} isActive={isActive} render={<Link href={item.url} onClick={handleNavClick} />}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>Operations</SidebarGroupLabel>
-              <SidebarMenu>
-                {operationsItems.map((item) => {
-                  const isActive =
-                    item.url === "/sessions"
-                      ? pathname === "/sessions" || pathname === "/sessions/"
-                      : pathname === item.url ||
-                        pathname.startsWith(`${item.url}/`)
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton tooltip={item.title} isActive={isActive} render={<Link href={item.url} onClick={handleNavClick} />}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-
-                <Collapsible
-                  open={checkInExpanded}
-                  onOpenChange={setCheckInOpen}
-                  className="group/collapsible"
-                >
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger
-                      render={
-                        <SidebarMenuButton tooltip="Check-In">
-                          <QrCode />
-                          <span>Check-In</span>
-                          <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                        </SidebarMenuButton>
-                      }
-                    />
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {checkInSubItems.map((sub) => (
-                          <SidebarMenuSubItem key={sub.title}>
-                            <SidebarMenuSubButton isActive={pathname === sub.url || pathname === `${sub.url}/` || pathname.startsWith(`${sub.url}/`)} render={<Link href={sub.url} onClick={handleNavClick} />}>
-                              <sub.icon className="size-3.5" />
-                              <span>{sub.title}</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
               </SidebarMenu>
             </SidebarGroup>
 
             {showAdminNav ? (
               <SidebarGroup>
-                <SidebarGroupLabel>Administration</SidebarGroupLabel>
+                <SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Administration</SidebarGroupLabel>
                 <SidebarMenu>
                   <Collapsible
                     open={usersExpanded}
@@ -354,8 +312,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem>
                       <CollapsibleTrigger
                         render={
-                          <SidebarMenuButton tooltip="Users">
-                            <UserCog />
+                          <SidebarMenuButton tooltip="Users" className="rounded-sm">
+                            <UserCog className="size-4" />
                             <span>Users</span>
                             <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                           </SidebarMenuButton>
@@ -368,6 +326,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                               <SidebarMenuSubButton
                                 isActive={isUsersSubItemActive(pathname, sub.url)}
                                 render={<Link href={sub.url} onClick={handleNavClick} />}
+                                className="rounded-sm"
                               >
                                 <sub.icon className="size-3.5" />
                                 <span>{sub.title}</span>
@@ -520,12 +479,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   render={
                     <SidebarMenuButton
                       size="lg"
-                      className="data-[state=open]:bg-sidebar-accent"
+                      className="data-[state=open]:bg-sidebar-accent rounded-sm"
                       tooltip="Account"
                     >
-                      <Avatar className="h-8 w-8 rounded-lg">
+                      <Avatar className="h-8 w-8 rounded-sm">
                         <AvatarImage src={userAvatar} alt={userName} />
-                        <AvatarFallback className="rounded-lg">HT</AvatarFallback>
+                        <AvatarFallback className="rounded-sm">HT</AvatarFallback>
                       </Avatar>
                       <div className="grid flex-1 text-left text-sm leading-tight">
                         <span className="truncate font-semibold">{userName}</span>
@@ -536,7 +495,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   }
                 />
                 <DropdownMenuContent
-                  className="z-[100] w-64"
+                  className="z-[100] w-64 rounded-sm"
                   side={isMobile ? "top" : "right"}
                   align="end"
                   sideOffset={8}
@@ -544,9 +503,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <DropdownMenuGroup>
                     <DropdownMenuLabel className="p-0 font-normal">
                       <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                        <Avatar className="h-8 w-8 rounded-lg">
+                        <Avatar className="h-8 w-8 rounded-sm">
                           <AvatarImage src={userAvatar} alt={userName} />
-                          <AvatarFallback className="rounded-lg">HT</AvatarFallback>
+                          <AvatarFallback className="rounded-sm">HT</AvatarFallback>
                         </Avatar>
                         <div className="grid flex-1 text-left text-sm leading-tight">
                           <span className="truncate font-semibold">{userName}</span>

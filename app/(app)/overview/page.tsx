@@ -4,43 +4,29 @@ import * as React from "react"
 import dynamic from "next/dynamic"
 import { useUser } from "@clerk/nextjs"
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   CalendarCheck,
   Download,
-  Minus,
   QrCode,
+  RefreshCw,
   ScrollText,
   UserPlus,
   Users,
 } from "lucide-react"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty"
 import { DashboardOverviewSkeleton } from "@/components/page-skeletons"
 import { ChartChunkSkeleton } from "@/components/charts/chart-chunk-skeleton"
 import { StableBlock } from "@/components/animation/stable-block"
-import { StandardPageHeader, buildReloadAction } from "@/components/standard-page-header"
 import { RequireRole } from "@/components/require-role"
 import { StaggerContainer, StaggerItem } from "@/components/animated-stagger"
 import { useStatsQuery, apiQueryKeys } from "@/hooks/use-api-queries"
 import { useQueryClient } from "@tanstack/react-query"
-import type { AuditCategory, AuditLog, StatTrend, Stats } from "@/lib/types"
+import type { Stats } from "@/lib/types"
 import { downloadCsv } from "@/lib/export-utils"
 import { dashboardGreeting, pickDashboardSubtext } from "@/lib/dashboard-greeting"
-import { cn, formatRelativeTime } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { SystemHeader } from "@/components/design-system/v2-primitives"
+import { KpiMetricCard } from "@/components/overview/kpi-metric-card"
+import { RecentActivityList } from "@/components/overview/recent-activity-list"
 
 const StudentEnrollmentChart = dynamic(
   () =>
@@ -49,17 +35,6 @@ const StudentEnrollmentChart = dynamic(
     ),
   { ssr: false, loading: () => <ChartChunkSkeleton className="h-64 min-h-[16rem]" /> }
 )
-
-const CATEGORY_LABELS: Record<AuditCategory, string> = {
-  student: "Student",
-  teacher: "Teacher",
-  staff: "Staff",
-  class: "Class",
-  session: "Session",
-  check_in: "Check-in",
-  user: "User",
-  other: "Other",
-}
 
 const kpiCards: {
   key: keyof Stats["trends"]
@@ -78,88 +53,25 @@ const kpiCards: {
   {
     key: "teachers",
     label: "Teachers",
-    hint: "On staff",
+    hint: "Active faculty",
     icon: Users,
     value: (stats) => stats.teachers,
   },
   {
     key: "sessions",
     label: "Sessions",
-    hint: "Last 30 days",
+    hint: "Past 30 days",
     icon: CalendarCheck,
     value: (stats) => stats.trends.sessions.current,
   },
   {
     key: "check_ins",
     label: "Check-ins",
-    hint: "Last 30 days",
+    hint: "Past 30 days",
     icon: QrCode,
     value: (stats) => stats.trends.check_ins.current,
   },
 ]
-
-function TrendHint({ trend }: { trend: StatTrend }) {
-  const Icon =
-    trend.direction === "up"
-      ? ArrowUpRight
-      : trend.direction === "down"
-        ? ArrowDownRight
-        : Minus
-  const label =
-    trend.direction === "stable"
-      ? "Stable vs prior 30 days"
-      : `${trend.delta > 0 ? "+" : ""}${trend.delta} vs prior 30 days`
-
-  return (
-    <p
-      className={cn(
-        "flex items-center gap-1 text-xs",
-        trend.direction === "up" && "text-attendance-present",
-        trend.direction === "down" && "text-attendance-absent",
-        trend.direction === "stable" && "text-muted-foreground"
-      )}
-    >
-      <Icon className="size-3.5" />
-      {label}
-    </p>
-  )
-}
-
-function RecentActivity({ logs }: { logs: AuditLog[] }) {
-  if (logs.length === 0) {
-    return (
-      <Empty className="border-0 p-6">
-        <EmptyHeader>
-          <EmptyTitle>No activity yet</EmptyTitle>
-          <EmptyDescription>
-            Important changes to students, classes, sessions, and check-ins will show up here.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
-
-  return (
-    <ul className="flex flex-col">
-      {logs.map((log) => (
-        <li
-          key={log.id}
-          className="flex items-start justify-between gap-3 border-b border-border/60 py-3 last:border-b-0"
-        >
-          <div className="min-w-0 flex flex-col gap-0.5">
-            <span className="truncate font-medium">{log.summary || "Update"}</span>
-            <span className="text-xs text-muted-foreground">
-              {CATEGORY_LABELS[log.category] ?? log.category}
-            </span>
-          </div>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {formatRelativeTime(log.timestamp)}
-          </span>
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 function OverviewContent() {
   const { user } = useUser()
@@ -171,35 +83,66 @@ function OverviewContent() {
   const [subtext, setSubtext] = React.useState(() => pickDashboardSubtext())
 
   return (
-    <StaggerContainer className="flex flex-col gap-6">
+    <StaggerContainer className="flex flex-col gap-5">
       <StaggerItem>
-        <StandardPageHeader
+        <SystemHeader
+          domain="OPERATIONS"
+          breadcrumb="OVERVIEW"
           title={greeting}
           description={subtext}
-          secondaryAction={buildReloadAction({
-            hasLoaded: !!stats,
-            loading,
-            onClick: () => {
-              setSubtext(pickDashboardSubtext())
-              void queryClient.invalidateQueries({ queryKey: apiQueryKeys.stats })
-              void refetch()
-            },
-          })}
-          primaryAction={{
-            label: "Check-In Terminal",
-            onClick: () => {
-              window.location.href = "/check-in/terminal"
-            },
-            icon: <QrCode className="size-4" />,
-          }}
+          metrics={
+            stats
+              ? [
+                  { label: "Enrolled", value: stats.students, tone: "default" },
+                  { label: "Faculty", value: stats.teachers, tone: "default" },
+                  {
+                    label: "Sessions (30d)",
+                    value: stats.trends.sessions.current,
+                    tone: stats.trends.sessions.direction === "up" ? "success" : "default",
+                  },
+                  {
+                    label: "Check-Ins (30d)",
+                    value: stats.trends.check_ins.current,
+                    tone: stats.trends.check_ins.direction === "up" ? "success" : "default",
+                  },
+                ]
+              : undefined
+          }
+          actions={
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading}
+                onClick={() => {
+                  setSubtext(pickDashboardSubtext())
+                  void queryClient.invalidateQueries({ queryKey: apiQueryKeys.stats })
+                  void refetch()
+                }}
+              >
+                <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+                Refresh
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  window.location.href = "/check-in/terminal"
+                }}
+              >
+                <QrCode className="size-3.5" />
+                Check-In Terminal
+              </Button>
+            </div>
+          }
         />
       </StaggerItem>
 
       {error ? (
         <StaggerItem>
-          <p className="text-sm text-destructive">
-            {error instanceof Error ? error.message : "Failed to load stats"}
-          </p>
+          <div className="rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {error instanceof Error ? error.message : "Failed to load telemetry stats"}
+          </div>
         </StaggerItem>
       ) : null}
 
@@ -212,11 +155,14 @@ function OverviewContent() {
       ) : (
         <>
           <StaggerItem>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Key Performance Indicators
+              </span>
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="xs"
                 disabled={!stats}
                 onClick={() => {
                   if (!stats) return
@@ -231,64 +177,59 @@ function OverviewContent() {
                   )
                 }}
               >
-                <Download data-icon="inline-start" />
+                <Download className="size-3" />
                 Export CSV
               </Button>
             </div>
           </StaggerItem>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {kpiCards.map(({ key, label, hint, icon: Icon, value }) => (
-              <Card key={key}>
-                <CardHeader>
-                  <CardTitle>{label}</CardTitle>
-                  <CardDescription>{hint}</CardDescription>
-                  <CardAction>
-                    <Icon className="size-4 text-muted-foreground" />
-                  </CardAction>
-                </CardHeader>
-                <CardContent>
-                  {stats ? (
-                    <>
-                      <div className="text-2xl font-semibold tabular-nums">
-                        {value(stats)}
-                      </div>
-                      <TrendHint trend={stats.trends[key]} />
-                    </>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <StaggerItem>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {kpiCards.map(({ key, label, hint, icon, value }) => (
+                <KpiMetricCard
+                  key={key}
+                  label={label}
+                  hint={hint}
+                  icon={icon}
+                  value={stats ? value(stats) : 0}
+                  trend={stats?.trends[key]}
+                />
+              ))}
+            </div>
+          </StaggerItem>
 
-          <div className="grid gap-4 lg:grid-cols-5">
-            <Card className="lg:col-span-3 flex flex-col">
-              <CardHeader>
-                <CardTitle>Student enrollment</CardTitle>
-                <CardDescription>
-                  {stats && stats.student_series.length < 12
-                    ? "Headcount since the first recorded enrollment"
-                    : "Cumulative headcount over the last 12 months"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 min-h-0">
-                <StudentEnrollmentChart data={stats?.student_series ?? []} className="h-full" />
-              </CardContent>
-            </Card>
+          <StaggerItem>
+            <div className="grid gap-4 lg:grid-cols-5">
+              <div className="flex flex-col rounded-sm border border-border bg-card p-4 lg:col-span-3">
+                <div className="mb-3">
+                  <h3 className="font-mono text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
+                    Student Enrollment
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {stats && stats.student_series.length < 12
+                      ? "Headcount since the first recorded enrollment"
+                      : "Cumulative headcount over the last 12 months"}
+                  </p>
+                </div>
+                <div className="min-h-[16rem] flex-1">
+                  <StudentEnrollmentChart data={stats?.student_series ?? []} className="h-full" />
+                </div>
+              </div>
 
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Recent activity</CardTitle>
-                <CardDescription>A few of the latest important changes</CardDescription>
-                <CardAction>
+              <div className="flex flex-col rounded-sm border border-border bg-card p-4 lg:col-span-2">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-mono text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
+                      Recent Activity
+                    </h3>
+                    <p className="text-xs text-muted-foreground">Latest operational audit logs</p>
+                  </div>
                   <ScrollText className="size-4 text-muted-foreground" />
-                </CardAction>
-              </CardHeader>
-              <CardContent>
-                <RecentActivity logs={stats?.recent_activity ?? []} />
-              </CardContent>
-            </Card>
-          </div>
+                </div>
+                <RecentActivityList logs={stats?.recent_activity ?? []} />
+              </div>
+            </div>
+          </StaggerItem>
         </>
       )}
     </StaggerContainer>

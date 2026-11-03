@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@clerk/nextjs"
 import { Megaphone, Plus, Search } from "lucide-react"
 
@@ -10,7 +11,6 @@ import {
   AnnouncementTagChip,
 } from "@/components/announcements/announcement-tags"
 import { AnnouncementsListSkeleton } from "@/components/skeleton/communications-skeleton"
-import { StandardPageHeader } from "@/components/standard-page-header"
 import { StaggerContainer, StaggerItem } from "@/components/animated-stagger"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { createApi } from "@/lib/api"
@@ -20,6 +20,7 @@ import type { Announcement } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { SystemHeader } from "@/components/design-system/v2-primitives"
 
 function formatListDate(iso: string | null) {
   if (!iso) return "—"
@@ -34,36 +35,37 @@ function formatListDate(iso: string | null) {
 
 function AnnouncementPressRow({ item }: { item: Announcement }) {
   const excerpt = descriptionPreview(item.body)
-  // Cap preview shorter than the shared helper so list rows stay tight.
   const preview =
-    excerpt.length > 140 ? `${excerpt.slice(0, 140).trimEnd()}…` : excerpt
+    excerpt.length > 150 ? `${excerpt.slice(0, 150).trimEnd()}…` : excerpt
   const showTags = item.is_pinned || item.tags.length > 0
 
   return (
     <Link
       href={`/announcements/${item.slug}`}
-      className="group block space-y-2 py-8 transition-colors"
+      className="group block space-y-2 py-6 transition-colors hover:bg-muted/20 px-3 -mx-3 rounded-sm"
     >
-      <time
-        dateTime={item.published_at ?? undefined}
-        className="block text-sm text-muted-foreground"
-      >
-        {formatListDate(item.published_at)}
-      </time>
+      <div className="flex items-center justify-between gap-2">
+        <time
+          dateTime={item.published_at ?? undefined}
+          className="block font-mono text-xs tabular-nums text-muted-foreground"
+        >
+          {formatListDate(item.published_at)}
+        </time>
+        {item.is_pinned ? <AnnouncementPinnedTag /> : null}
+      </div>
 
-      <h2 className="text-2xl font-semibold tracking-tight text-foreground transition-colors group-hover:text-foreground/80 sm:text-[1.75rem]">
+      <h2 className="text-xl font-semibold tracking-tight text-foreground transition-colors group-hover:underline">
         {item.title}
       </h2>
 
       {preview ? (
-        <p className="line-clamp-2 max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
+        <p className="line-clamp-2 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
           {preview}
         </p>
       ) : null}
 
       {showTags ? (
-        <div className="flex flex-wrap gap-2 pt-1">
-          {item.is_pinned ? <AnnouncementPinnedTag /> : null}
+        <div className="flex flex-wrap gap-1.5 pt-1">
           {item.tags.map((tag) => (
             <AnnouncementTagChip key={tag.slug} name={tag.name} slug={tag.slug} />
           ))}
@@ -74,6 +76,7 @@ function AnnouncementPressRow({ item }: { item: Announcement }) {
 }
 
 export default function AnnouncementsPage() {
+  const router = useRouter()
   const { getToken, isLoaded, isSignedIn } = useAuth()
   const { role } = useCurrentUser()
   const staff = isStaffOrAbove(role)
@@ -122,52 +125,53 @@ export default function AnnouncementsPage() {
     })
   }, [announcements])
 
-  if (!isLoaded) {
-    return (
-      <StaggerContainer className="flex flex-col gap-6">
-        <StaggerItem>
-          <StandardPageHeader
-            className="mb-0"
-            title="Announcements"
-            description="School updates for students, parents, teachers, and staff."
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <AnnouncementsListSkeleton />
-        </StaggerItem>
-      </StaggerContainer>
-    )
-  }
-
   return (
     <StaggerContainer className="flex flex-col gap-6">
       <StaggerItem>
-        <StandardPageHeader
-          className="mb-0"
+        <SystemHeader
+          domain="COMMUNICATIONS"
+          breadcrumb="ANNOUNCEMENTS"
           title="Announcements"
           description="School updates for students, parents, teachers, and staff."
-        >
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          tabs={[
+            { id: "announcements", label: "Announcements", count: announcements.length },
+            { id: "events", label: "Events" },
+          ]}
+          activeTab="announcements"
+          onTabChange={(id) => {
+            if (id === "events") router.push("/communications?tab=events")
+          }}
+          actions={
+            staff ? (
+              <Button
+                size="sm"
+                className="rounded-sm"
+                render={<Link href="/announcements/new" />}
+              >
+                <Plus className="size-3.5" />
+                New Announcement
+              </Button>
+            ) : null
+          }
+        />
+      </StaggerItem>
+
+      <StaggerItem>
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search announcements"
-              className="h-9 rounded-full pl-9"
+              placeholder="Search announcements..."
+              className="h-8 rounded-sm pl-8 text-xs"
             />
           </div>
-          {staff ? (
-            <Button
-              size="icon"
-              className="size-9 shrink-0 rounded-full"
-              aria-label="Add announcement"
-              render={<Link href="/announcements/new" />}
-            >
-              <Plus className="size-4" />
-            </Button>
-          ) : null}
-        </StandardPageHeader>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {sorted.length} records
+          </span>
+        </div>
       </StaggerItem>
 
       {loading ? (
@@ -176,7 +180,7 @@ export default function AnnouncementsPage() {
         </StaggerItem>
       ) : loadError ? (
         <StaggerItem>
-          <Card>
+          <Card className="rounded-sm border border-destructive/30 bg-destructive/5">
             <CardContent className="py-10 text-center text-sm text-destructive">
               {loadError}
             </CardContent>
@@ -184,30 +188,30 @@ export default function AnnouncementsPage() {
         </StaggerItem>
       ) : sorted.length === 0 ? (
         <StaggerItem>
-          <Card>
+          <Card className="rounded-sm border border-border bg-card">
             <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-              <Megaphone className="size-8 text-muted-foreground/50" />
-              <p className="font-medium">No announcements yet</p>
-              <p className="text-sm text-muted-foreground">
+              <Megaphone className="size-8 text-muted-foreground/40" />
+              <p className="font-medium text-foreground">No announcements yet</p>
+              <p className="text-xs text-muted-foreground">
                 {staff
                   ? "Create the first announcement for your school community."
                   : "Check back later for school updates."}
               </p>
               {staff ? (
                 <Button
-                  size="icon"
-                  className="size-9 rounded-full"
-                  aria-label="Add announcement"
+                  size="sm"
+                  className="rounded-sm"
                   render={<Link href="/announcements/new" />}
                 >
-                  <Plus className="size-4" />
+                  <Plus className="size-3.5" />
+                  Add Announcement
                 </Button>
               ) : null}
             </CardContent>
           </Card>
         </StaggerItem>
       ) : (
-        <div className="mx-auto w-full max-w-3xl divide-y divide-border/70">
+        <div className="mx-auto w-full max-w-3xl divide-y divide-border">
           {sorted.map((item) => (
             <StaggerItem key={item.id}>
               <AnnouncementPressRow item={item} />

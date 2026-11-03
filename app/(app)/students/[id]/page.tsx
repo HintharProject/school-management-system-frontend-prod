@@ -44,20 +44,14 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { InspectorSheet } from "@/components/design-system/v2-primitives"
+import { toast } from "@/components/ui/toast"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { PageSkeleton, STUDENT_DETAIL_PAGE_LAYOUT } from "@/components/page-skeletons"
 import { StaggerContainer, StaggerItem } from "@/components/animated-stagger"
@@ -167,8 +161,7 @@ function StudentDetailContent() {
   const [tokenLoading, setTokenLoading] = React.useState(false)
 
   const flashSuccess = React.useCallback((msg: string) => {
-    setSuccess(msg)
-    window.setTimeout(() => setSuccess(null), 3500)
+    toast.add({ title: msg, type: "success" })
   }, [])
 
   const applyTimetableConflicts = React.useCallback(
@@ -749,13 +742,6 @@ function StudentDetailContent() {
           </div>
         </StaggerItem>
       ) : null}
-      {success ? (
-        <StaggerItem>
-          <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
-            {success}
-          </div>
-        </StaggerItem>
-      ) : null}
 
       {loading ? (
         <PageSkeleton blocks={STUDENT_DETAIL_PAGE_LAYOUT} />
@@ -1300,74 +1286,112 @@ function StudentDetailContent() {
         </>
       )}
 
-      {isStaff ? (
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent onClose={() => setEditOpen(false)}>
-            <DialogHeader>
-              <DialogTitle>Edit student</DialogTitle>
-              <DialogDescription>Update profile fields for {student?.name}.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-1.5">
-                <label htmlFor="edit-name" className="text-sm font-medium">
-                  Name
-                </label>
-                <Input id="edit-name" value={formName} onChange={(e) => setFormName(e.target.value)} />
-              </div>
-              <div className="grid gap-1.5">
-                <label htmlFor="edit-dob" className="text-sm font-medium">
-                  Date of birth
-                </label>
-                <Input
-                  id="edit-dob"
-                  type="date"
-                  value={formDob}
-                  onChange={(e) => setFormDob(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <label htmlFor="edit-contact" className="text-sm font-medium">
-                  Contact
-                </label>
-                <Input
-                  id="edit-contact"
-                  value={formContact}
-                  onChange={(e) => setFormContact(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <span className="text-sm font-medium">School</span>
-                <Select value={formSchool} onValueChange={(v) => setFormSchool(v ?? "")}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="School" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SCHOOL_CODES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-1.5">
-                <label htmlFor="edit-uci" className="text-sm font-medium">
-                  UCI
-                </label>
-                <Input id="edit-uci" value={formUci} onChange={(e) => setFormUci(e.target.value)} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editSaving}>
+      {isStaff && student ? (
+        <InspectorSheet
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          code={student.unique_code}
+          title={`Edit ${student.name}`}
+          subtitle="Slide-Over Student Profile Editor"
+          status={{
+            label: student.check_in_token_active !== false ? "PASS ACTIVE" : "PASS REVOKED",
+            tone: student.check_in_token_active !== false ? "active" : "inactive",
+          }}
+          footerActions={
+            <div className="flex w-full items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditOpen(false)}
+                disabled={editSaving}
+                className="font-mono text-xs uppercase"
+              >
                 Cancel
               </Button>
-              <Button onClick={() => void saveProfile()} disabled={editSaving || !formName.trim()}>
-                {editSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
-                Save
+              <Button
+                size="sm"
+                onClick={() => void saveProfile()}
+                disabled={editSaving || !formName.trim()}
+                className="font-mono text-xs uppercase"
+              >
+                {editSaving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                Save Changes
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                School Stream <span className="text-destructive">*</span>
+              </label>
+              <Select value={formSchool} onValueChange={(v) => setFormSchool(v ?? "")}>
+                <SelectTrigger className="mt-1.5 w-full font-mono text-xs">
+                  <span className="truncate">
+                    {SCHOOL_CODES.find((s) => s.value === formSchool)
+                      ? `${formSchool} — ${SCHOOL_CODES.find((s) => s.value === formSchool)?.label}`
+                      : formSchool || "Select School"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {SCHOOL_CODES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.value} — {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label htmlFor="edit-name" className="mb-1.5 block text-sm font-medium">
+                Full Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                id="edit-name"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Student full name"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-dob" className="mb-1.5 block text-sm font-medium">
+                Date of Birth
+              </label>
+              <Input
+                id="edit-dob"
+                type="date"
+                value={formDob}
+                onChange={(e) => setFormDob(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-contact" className="mb-1.5 block text-sm font-medium">
+                Guardian Contact
+              </label>
+              <Input
+                id="edit-contact"
+                value={formContact}
+                onChange={(e) => setFormContact(e.target.value)}
+                placeholder="Phone number or email"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-uci" className="mb-1.5 block text-sm font-medium">
+                Exam Candidate Number (UCI)
+              </label>
+              <Input
+                id="edit-uci"
+                value={formUci}
+                onChange={(e) => setFormUci(e.target.value)}
+                placeholder="e.g. 1042-990"
+              />
+            </div>
+          </div>
+        </InspectorSheet>
       ) : null}
     </StaggerContainer>
   )
