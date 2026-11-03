@@ -48,6 +48,10 @@ import {
   CodeChip,
   TelemetryTag,
 } from "@/components/design-system/v2-primitives"
+import {
+  AttendanceMatrixView,
+  type MatrixSummaryStats,
+} from "@/components/attendance/attendance-matrix-view"
 import { toast } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -112,6 +116,36 @@ export function AttendanceWorkspace({
       subjectCount: undefined,
     }))
   }, [classes])
+
+  // Active Tab / View State
+  const viewFromUrl = searchParams.get("view") || searchParams.get("tab")
+  const [activeTab, setActiveTab] = React.useState<"roll" | "matrix">(
+    viewFromUrl === "matrix" ? "matrix" : "roll"
+  )
+
+  const handleTabChange = (tabId: string) => {
+    const nextTab = tabId as "roll" | "matrix"
+    setActiveTab(nextTab)
+    const sp = new URLSearchParams(window.location.search)
+    sp.set("view", nextTab)
+    router.replace(`?${sp.toString()}`, { scroll: false })
+  }
+
+  // Monthly Matrix Summary Stats & External Triggers
+  const [matrixStats, setMatrixStats] = React.useState<MatrixSummaryStats>({
+    totalSessions: 0,
+    filteredSessionsCount: 0,
+    subjectsCount: 0,
+    overallRate: 0,
+    presentCount: 0,
+    lateCount: 0,
+    absentCount: 0,
+    excusedCount: 0,
+    dirtyCount: 0,
+    saving: false,
+  })
+  const [matrixRefreshTrigger, setMatrixRefreshTrigger] = React.useState(0)
+  const [matrixSaveTrigger, setMatrixSaveTrigger] = React.useState(0)
 
   // Selected Cohort & Date from URL or state
   const classIdParam = searchParams.get("classId") || (initialClassId ? String(initialClassId) : null)
@@ -798,59 +832,142 @@ export function AttendanceWorkspace({
   }, [selectedCohortCode, adhocStudents, adhocRoll, matrixStudents, rollStatuses, gateStudents])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 w-full">
       {/* Top Header */}
       <SystemHeader
         domain="OPERATIONS"
         breadcrumb={[
-          { label: "ATTENDANCE ROLL" },
+          { label: "ATTENDANCE" },
+          { label: activeTab === "matrix" ? "MONTHLY MATRIX" : "DAILY ROLL" },
           { label: selectedCohortCode || "ALL" },
         ]}
-        title="Session Attendance & Ad-Hoc Roll"
-        description="Eliminates the middleman class-picker page with 1-click CohortSwitcher. Mark Present, Late, Absent, or Excused with gate check-in telemetry."
-        metrics={[
+        title={
+          activeTab === "matrix"
+            ? "Monthly & Subject Attendance Matrix"
+            : "Session Attendance & Ad-Hoc Roll"
+        }
+        description={
+          activeTab === "matrix"
+            ? "Comprehensive cross-session matrix report with per-subject filtering, student attendance rates, CSV export, and inline roll editing."
+            : "Eliminates the middleman class-picker page with 1-click CohortSwitcher. Mark Present, Late, Absent, or Excused with gate check-in telemetry."
+        }
+        tabs={[
           {
-            label: "ACTIVE COHORT",
-            value: selectedCohortCode === "ADHOC" ? "AD-HOC" : selectedCohortCode || "—",
+            id: "roll",
+            label: "Daily Session Roll",
+            count: selectedCohortCode === "ADHOC" ? adhocSessions.length : matrixSessions.length,
           },
           {
-            label: "GATE ARRIVED",
-            value: `${stats.gateArrived} / ${stats.total}`,
-            tone: stats.gateArrived > 0 ? "success" : "default",
-          },
-          {
-            label: "ATTENDANCE RATE",
-            value: `${stats.rate}%`,
-            tone: stats.rate >= 90 ? "success" : stats.rate >= 75 ? "warning" : "destructive",
-          },
-          {
-            label: "PRESENT",
-            value: stats.p,
-            tone: "success",
-          },
-          {
-            label: "LATE / ABSENT",
-            value: `${stats.l} / ${stats.a}`,
-            tone: stats.a > 0 ? "destructive" : "warning",
+            id: "matrix",
+            label: "Monthly & Subject Matrix",
+            count: matrixStats.filteredSessionsCount || undefined,
           },
         ]}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        metrics={
+          activeTab === "matrix"
+            ? [
+                {
+                  label: "ACTIVE COHORT",
+                  value: selectedCohortCode === "ADHOC" ? "AD-HOC" : selectedCohortCode || "—",
+                },
+                {
+                  label: "SESSIONS IN VIEW",
+                  value: matrixStats.filteredSessionsCount,
+                },
+                {
+                  label: "RANGE RATE",
+                  value: `${matrixStats.overallRate}%`,
+                  tone:
+                    matrixStats.overallRate >= 90
+                      ? "success"
+                      : matrixStats.overallRate >= 75
+                        ? "warning"
+                        : "destructive",
+                },
+                {
+                  label: "PRESENT",
+                  value: matrixStats.presentCount,
+                  tone: "success",
+                },
+                {
+                  label: "LATE / ABSENT",
+                  value: `${matrixStats.lateCount} / ${matrixStats.absentCount}`,
+                  tone: matrixStats.absentCount > 0 ? "destructive" : "warning",
+                },
+              ]
+            : [
+                {
+                  label: "ACTIVE COHORT",
+                  value: selectedCohortCode === "ADHOC" ? "AD-HOC" : selectedCohortCode || "—",
+                },
+                {
+                  label: "GATE ARRIVED",
+                  value: `${stats.gateArrived} / ${stats.total}`,
+                  tone: stats.gateArrived > 0 ? "success" : "default",
+                },
+                {
+                  label: "ATTENDANCE RATE",
+                  value: `${stats.rate}%`,
+                  tone: stats.rate >= 90 ? "success" : stats.rate >= 75 ? "warning" : "destructive",
+                },
+                {
+                  label: "PRESENT",
+                  value: stats.p,
+                  tone: "success",
+                },
+                {
+                  label: "LATE / ABSENT",
+                  value: `${stats.l} / ${stats.a}`,
+                  tone: stats.a > 0 ? "destructive" : "warning",
+                },
+              ]
+        }
         actions={
-          <Button
-            size="xs"
-            onClick={selectedCohortCode === "ADHOC" ? handleSaveAdhocRoll : handleSaveRoll}
-            disabled={savingRoll || (selectedCohortCode !== "ADHOC" && !selectedSessionId)}
-            className={cn(
-              "gap-1.5 font-mono text-xs transition-colors",
-              hasUnsavedChanges && "border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
-            )}
-          >
-            {hasUnsavedChanges ? (
-              <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-            ) : (
-              <Save className="size-3.5" />
-            )}
-            <span>{savingRoll ? "Saving..." : hasUnsavedChanges ? "Save Roll *" : "Save Roll"}</span>
-          </Button>
+          activeTab === "matrix" ? (
+            <Button
+              size="xs"
+              onClick={() => setMatrixSaveTrigger((prev) => prev + 1)}
+              disabled={matrixStats.saving || matrixStats.dirtyCount === 0}
+              className={cn(
+                "gap-1.5 font-mono text-xs transition-colors",
+                matrixStats.dirtyCount > 0 &&
+                  "border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+              )}
+            >
+              {matrixStats.dirtyCount > 0 ? (
+                <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+              <span>
+                {matrixStats.saving
+                  ? "Saving..."
+                  : matrixStats.dirtyCount > 0
+                    ? `Save Matrix * (${matrixStats.dirtyCount})`
+                    : "Save Matrix"}
+              </span>
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              onClick={selectedCohortCode === "ADHOC" ? handleSaveAdhocRoll : handleSaveRoll}
+              disabled={savingRoll || (selectedCohortCode !== "ADHOC" && !selectedSessionId)}
+              className={cn(
+                "gap-1.5 font-mono text-xs transition-colors",
+                hasUnsavedChanges &&
+                  "border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+              )}
+            >
+              {hasUnsavedChanges ? (
+                <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+              <span>{savingRoll ? "Saving..." : hasUnsavedChanges ? "Save Roll *" : "Save Roll"}</span>
+            </Button>
+          )
         }
       />
 
@@ -864,20 +981,31 @@ export function AttendanceWorkspace({
           <Button
             variant="outline"
             size="xs"
-            onClick={selectedCohortCode === "ADHOC" ? fetchAdhocData : fetchCohortRoll}
-            disabled={loading}
+            onClick={() => {
+              if (activeTab === "matrix") {
+                setMatrixRefreshTrigger((prev) => prev + 1)
+              } else if (selectedCohortCode === "ADHOC") {
+                fetchAdhocData()
+              } else {
+                fetchCohortRoll()
+              }
+            }}
+            disabled={loading || matrixStats.saving}
             className="h-7 rounded-sm font-mono text-[11px] uppercase"
           >
-            <RefreshCw className={cn("mr-1 size-3", loading && "animate-spin")} />
+            <RefreshCw className={cn("mr-1 size-3", (loading || matrixStats.saving) && "animate-spin")} />
             Refresh
           </Button>
         }
       />
 
       {/* --------------------------------------------------------------------- */}
-      {/* REGULAR COHORT ATTENDANCE WORKSPACE                                    */}
+      {/* TAB 1: DAILY SESSION ROLL                                              */}
       {/* --------------------------------------------------------------------- */}
-      {selectedCohortCode !== "ADHOC" && (
+      {activeTab === "roll" && (
+        <>
+          {/* REGULAR COHORT ATTENDANCE WORKSPACE */}
+          {selectedCohortCode !== "ADHOC" && (
         <div className="space-y-3">
           {/* Compact Session Selection & Date Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-card px-3.5 py-2.5">
@@ -1275,6 +1403,33 @@ export function AttendanceWorkspace({
             </Table>
           </DataModule>
         </div>
+      )}
+        </>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* TAB 2: MONTHLY & SUBJECT ATTENDANCE MATRIX REPORT                      */}
+      {/* --------------------------------------------------------------------- */}
+      {activeTab === "matrix" && (
+        <AttendanceMatrixView
+          activeClass={activeClass}
+          isAdhoc={selectedCohortCode === "ADHOC"}
+          subjects={subjects}
+          teachers={teachers}
+          refreshTrigger={matrixRefreshTrigger}
+          saveTrigger={matrixSaveTrigger}
+          onStatsChange={setMatrixStats}
+          onJumpToSession={(dateStr, sessId) => {
+            setSelectedDate(dateStr)
+            setSelectedSessionId(sessId)
+            setActiveTab("roll")
+            const sp = new URLSearchParams(window.location.search)
+            sp.set("view", "roll")
+            sp.set("date", dateStr)
+            sp.set("sessionId", String(sessId))
+            router.replace(`?${sp.toString()}`, { scroll: false })
+          }}
+        />
       )}
 
       {/* --------------------------------------------------------------------- */}

@@ -196,7 +196,7 @@ export function SystemHeader({
   return (
     <div
       className={cn(
-        "rounded-sm border border-border bg-card overflow-hidden",
+        "w-full min-w-0 rounded-sm border border-border bg-card overflow-hidden",
         className
       )}
     >
@@ -382,7 +382,7 @@ export function DataModule({
   return (
     <div
       className={cn(
-        "rounded-sm border border-border bg-card overflow-hidden",
+        "w-full min-w-0 rounded-sm border border-border bg-card overflow-hidden",
         className
       )}
     >

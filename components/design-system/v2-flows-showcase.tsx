@@ -6,8 +6,10 @@ import {
   Download,
   ExternalLink,
   Plus,
+  Printer,
   QrCode,
   RefreshCw,
+  Sparkles,
   Users,
 } from "lucide-react"
 import { QrCanvas } from "@/components/qr-canvas"
@@ -800,6 +802,16 @@ function Flow3StudentsAndCheckIn() {
     "ALL" | "ARRIVED" | "MISSING"
   >("ALL")
 
+  // Unified InspectorSheet 2-tab state & Check-in date clamp state
+  const [studentSheetTab, setStudentSheetTab] = React.useState<
+    "pass" | "profile"
+  >("pass")
+  const todayStr = React.useMemo(
+    () => new Date().toISOString().split("T")[0],
+    []
+  )
+  const [checkInDate, setCheckInDate] = React.useState<string>(todayStr)
+
   const inspectedStudent =
     students.find((s) => s.id === inspectedStudentId) ?? null
 
@@ -1008,15 +1020,18 @@ function Flow3StudentsAndCheckIn() {
             </Table>
           </DataModule>
 
-          {/* Student Slide-Over QR Inspector Sheet */}
+          {/* Student Slide-Over QR Inspector Sheet with Segmented 2-Tab Switcher */}
           <InspectorSheet
             open={Boolean(inspectedStudent)}
             onOpenChange={(open) => {
-              if (!open) setInspectedStudentId(null)
+              if (!open) {
+                setInspectedStudentId(null)
+                setStudentSheetTab("pass")
+              }
             }}
             code={inspectedStudent?.code ?? "STUDENT"}
             title={inspectedStudent?.name ?? ""}
-            subtitle="Slide-Over Student & QR Credential Inspector"
+            subtitle="Slide-Over Student Credential & Telemetry Inspector"
             status={
               inspectedStudent
                 ? {
@@ -1049,75 +1064,213 @@ function Flow3StudentsAndCheckIn() {
                       value: inspectedStudent.attendanceRate,
                       mono: true,
                     },
-                    {
-                      label: "GUARDIAN CONTACT",
-                      value: inspectedStudent.contact,
-                      mono: true,
-                    },
-                    {
-                      label: "TODAY'S CAMPUS STATUS",
-                      value: inspectedStudent.checkedInToday
-                        ? `Arrived (${inspectedStudent.checkInTime})`
-                        : "Not Checked In",
-                    },
                   ]
                 : []
             }
             footerActions={
               inspectedStudent ? (
-                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                <div className="flex w-full items-center justify-between gap-2">
                   <Button
                     variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setInspectedStudentId(null)
+                      setStudentSheetTab("pass")
+                    }}
+                  >
+                    Done
+                  </Button>
+                  <Button
                     size="sm"
                     onClick={() => toggleStudentQrStatus(inspectedStudent.id)}
                   >
                     {inspectedStudent.qrActive
-                      ? "Deactivate Badge"
-                      : "Activate Badge"}
+                      ? "Deactivate Pass"
+                      : "Activate Pass"}
                   </Button>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() =>
-                        regenerateStudentQrToken(inspectedStudent.id)
-                      }
-                    >
-                      <RefreshCw className="size-3.5" />
-                      Rotate Token
-                    </Button>
-                    <Button size="sm" className="gap-1.5">
-                      <Download className="size-3.5" />
-                      Download PNG
-                    </Button>
-                  </div>
                 </div>
               ) : null
             }
           >
             {inspectedStudent && (
-              <div className="flex flex-col items-center gap-3 rounded-md border border-border bg-muted/30 p-4">
-                <div className="flex w-full items-center justify-between">
-                  <span className="font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    LIVE CAMPUS QR CREDENTIAL
-                  </span>
-                  <CodeChip>{inspectedStudent.qrToken}</CodeChip>
+              <div className="space-y-4">
+                {/* Unified Segmented 2-Tab Switcher */}
+                <div className="flex items-center gap-1 rounded-sm border border-border bg-muted/40 p-1 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setStudentSheetTab("pass")}
+                    className={cn(
+                      "flex-1 rounded-[2px] py-1 text-center font-medium transition-colors",
+                      studentSheetTab === "pass"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    QR Pass & Telemetry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentSheetTab("profile")}
+                    className={cn(
+                      "flex-1 rounded-[2px] py-1 text-center font-medium transition-colors",
+                      studentSheetTab === "profile"
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Edit Profile
+                  </button>
                 </div>
-                {inspectedStudent.qrActive ? (
-                  <QrCanvas
-                    value={inspectedStudent.qrToken}
-                    size={168}
-                    className="rounded-sm border border-border p-1"
-                  />
+
+                {studentSheetTab === "pass" ? (
+                  <div className="space-y-4">
+                    {/* QR Pass Card */}
+                    <div className="flex flex-col items-center gap-3 rounded-md border border-border bg-muted/30 p-4">
+                      <div className="flex w-full items-center justify-between">
+                        <span className="font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                          LIVE CAMPUS QR CREDENTIAL
+                        </span>
+                        <CodeChip>{inspectedStudent.qrToken}</CodeChip>
+                      </div>
+
+                      {inspectedStudent.qrActive ? (
+                        <QrCanvas
+                          value={inspectedStudent.qrToken}
+                          size={160}
+                          className="rounded-sm border border-border bg-white p-1"
+                        />
+                      ) : (
+                        <div className="flex size-[160px] flex-col items-center justify-center rounded-sm border border-dashed border-destructive/50 bg-destructive/5 p-4 text-center">
+                          <span className="font-mono text-xs font-semibold text-destructive uppercase">
+                            TOKEN REVOKED
+                          </span>
+                          <span className="mt-1 text-[11px] text-muted-foreground">
+                            Click Activate or Rotate Token below to issue a new badge.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Action buttons aligned directly below the QR code card */}
+                      <div className="grid w-full grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          className="h-8 gap-1 font-mono text-[11px]"
+                          onClick={() =>
+                            regenerateStudentQrToken(inspectedStudent.id)
+                          }
+                        >
+                          <RefreshCw className="size-3" />
+                          Rotate
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          className="h-8 gap-1 font-mono text-[11px]"
+                        >
+                          <Download className="size-3" />
+                          PNG
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          className="h-8 gap-1 font-mono text-[11px]"
+                        >
+                          <Printer className="size-3" />
+                          Print
+                        </Button>
+                        <Button
+                          variant={inspectedStudent.qrActive ? "outline" : "default"}
+                          size="xs"
+                          className={cn(
+                            "h-8 font-mono text-[11px]",
+                            inspectedStudent.qrActive && "text-destructive hover:text-destructive"
+                          )}
+                          onClick={() =>
+                            toggleStudentQrStatus(inspectedStudent.id)
+                          }
+                        >
+                          {inspectedStudent.qrActive ? "Deactivate" : "Activate"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Telemetry info */}
+                    <div className="space-y-2 rounded-sm border border-border bg-card p-3 text-xs">
+                      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                        <span className="text-muted-foreground">Guardian Contact:</span>
+                        <span className="font-mono font-medium text-foreground">
+                          {inspectedStudent.contact}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                        <span className="text-muted-foreground">Campus Status:</span>
+                        <span className="font-medium text-foreground">
+                          {inspectedStudent.checkedInToday
+                            ? `Arrived (${inspectedStudent.checkInTime})`
+                            : "Not Checked In Today"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Enrolled Cohorts:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {inspectedStudent.cohorts.map((c) => (
+                            <CodeChip key={c}>{c}</CodeChip>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="flex size-[168px] flex-col items-center justify-center rounded-sm border border-dashed border-destructive/50 bg-destructive/5 p-4 text-center">
-                    <span className="font-mono text-xs font-semibold text-destructive uppercase">
-                      TOKEN REVOKED
-                    </span>
-                    <span className="mt-1 text-[11px] text-muted-foreground">
-                      Click Activate or Rotate Token below to issue a new badge.
-                    </span>
+                  <div className="space-y-3 rounded-md border border-border bg-card p-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="font-mono text-[10px] uppercase text-muted-foreground">
+                        Student Full Name
+                      </label>
+                      <Input
+                        defaultValue={inspectedStudent.name}
+                        className="h-8 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-mono text-[10px] uppercase text-muted-foreground">
+                        Student Code
+                      </label>
+                      <Input
+                        defaultValue={inspectedStudent.code}
+                        className="h-8 font-mono text-xs uppercase"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-mono text-[10px] uppercase text-muted-foreground">
+                        School Stream
+                      </label>
+                      <Input
+                        defaultValue={inspectedStudent.schoolCode}
+                        className="h-8 font-mono text-xs uppercase"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-mono text-[10px] uppercase text-muted-foreground">
+                        Guardian Contact Phone
+                      </label>
+                      <Input
+                        defaultValue={inspectedStudent.contact}
+                        className="h-8 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-mono text-[10px] uppercase text-muted-foreground">
+                        Administrative Notes
+                      </label>
+                      <Input
+                        defaultValue="Enrolled for academic session 2026-2027. Transport route kamayut."
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <Button size="sm" className="mt-2 w-full">
+                      Save Profile Changes
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1174,25 +1327,49 @@ function Flow3StudentsAndCheckIn() {
             searchValue={search}
             onSearchChange={setSearch}
             filters={
-              checkInTab === "daily-roll" ? (
-                <div className="flex items-center gap-1">
-                  {(["ALL", "MISSING", "ARRIVED"] as const).map((status) => (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() => setRollFilter(status)}
-                      className={cn(
-                        "h-8 rounded-sm border px-2.5 font-mono text-[11px] font-medium transition-colors",
-                        rollFilter === status
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-background text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {status}
-                    </button>
-                  ))}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Date Picker with Today/Past Clamp */}
+                <div className="flex items-center gap-1.5 rounded-sm border border-border bg-background px-2 py-1">
+                  <span className="font-mono text-[10px] font-semibold text-muted-foreground uppercase">
+                    ROLL DATE:
+                  </span>
+                  <input
+                    type="date"
+                    value={checkInDate}
+                    max={todayStr}
+                    onChange={(e) => {
+                      if (e.target.value <= todayStr) {
+                        setCheckInDate(e.target.value)
+                      }
+                    }}
+                    className="bg-transparent font-mono text-xs text-foreground outline-hidden"
+                  />
                 </div>
-              ) : null
+                <span className="hidden items-center gap-1 rounded-[2px] border border-border bg-muted/40 px-2 py-1 font-mono text-[10px] font-semibold text-muted-foreground uppercase sm:inline-flex">
+                  <span className="size-1.5 rounded-[1px] bg-emerald-500" />
+                  max={todayStr} clamp enforced
+                </span>
+
+                {checkInTab === "daily-roll" && (
+                  <div className="flex items-center gap-1">
+                    {(["ALL", "MISSING", "ARRIVED"] as const).map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setRollFilter(status)}
+                        className={cn(
+                          "h-8 rounded-sm border px-2.5 font-mono text-[11px] font-medium transition-colors",
+                          rollFilter === status
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             }
             totalCount={students.length}
             countLabel="GATE RECORDS"
@@ -1295,16 +1472,65 @@ function Flow4ScheduleAndAttendance() {
   )
   const [subTeacherInput, setSubTeacherInput] = React.useState<string>("")
 
-  // Roll matrix interactive state
-  const [rollStatuses, setRollStatuses] = React.useState<
+  // Generate Sessions date-range confirmation drawer state:
+  const [generateSessionsOpen, setGenerateSessionsOpen] =
+    React.useState<boolean>(false)
+  const [genPreset, setGenPreset] = React.useState<"month" | "30days" | "term">(
+    "month"
+  )
+  const [genStartDate, setGenStartDate] = React.useState<string>("2026-11-01")
+  const [genEndDate, setGenEndDate] = React.useState<string>("2026-11-30")
+  const [generationExecuted, setGenerationExecuted] =
+    React.useState<boolean>(false)
+
+  // Attendance Dual-Mode (Daily Session Roll vs Monthly Matrix) state:
+  const [attendanceSubMode, setAttendanceSubMode] = React.useState<
+    "daily" | "matrix"
+  >("matrix")
+  const [matrixSubjectFilter, setMatrixSubjectFilter] =
+    React.useState<string>("ALL")
+
+  const MATRIX_OCCURRENCES = [
+    { id: "s0", date: "Nov 02", time: "Mon 09:00", subject: "Mathematics" },
+    { id: "s1", date: "Nov 04", time: "Wed 10:45", subject: "Physics" },
+    { id: "s2", date: "Nov 06", time: "Fri 14:00", subject: "Chemistry" },
+    { id: "s3", date: "Nov 09", time: "Mon 09:00", subject: "Mathematics" },
+    { id: "s4", date: "Nov 11", time: "Wed 10:45", subject: "Physics" },
+    { id: "s5", date: "Nov 13", time: "Fri 14:00", subject: "Chemistry" },
+    { id: "s6", date: "Nov 16", time: "Mon 09:00", subject: "Mathematics" },
+    { id: "s7", date: "Nov 18", time: "Wed 10:45", subject: "Physics" },
+    { id: "s8", date: "Nov 20", time: "Fri 14:00", subject: "Chemistry" },
+    { id: "s9", date: "Nov 23", time: "Mon 09:00", subject: "Mathematics" },
+  ]
+
+  const filteredMatrixOccurrences = React.useMemo(() => {
+    if (matrixSubjectFilter === "ALL") return MATRIX_OCCURRENCES
+    return MATRIX_OCCURRENCES.filter(
+      (o) => o.subject.toUpperCase() === matrixSubjectFilter.toUpperCase()
+    )
+  }, [matrixSubjectFilter])
+
+  const [matrixStatuses, setMatrixStatuses] = React.useState<
     Record<string, "present" | "late" | "absent" | "excused">
   >({
-    "1-0": "present",
-    "1-1": "present",
-    "2-0": "late",
-    "2-1": "present",
-    "3-0": "absent",
-    "3-1": "excused",
+    "0-s0": "present", "0-s1": "present", "0-s2": "present", "0-s3": "late", "0-s4": "present", "0-s5": "present", "0-s6": "present", "0-s7": "present", "0-s8": "present", "0-s9": "present",
+    "1-s0": "present", "1-s1": "late", "1-s2": "present", "1-s3": "present", "1-s4": "absent", "1-s5": "present", "1-s6": "present", "1-s7": "late", "1-s8": "present", "1-s9": "present",
+    "2-s0": "absent", "2-s1": "excused", "2-s2": "present", "2-s3": "present", "2-s4": "present", "2-s5": "present", "2-s6": "excused", "2-s7": "present", "2-s8": "present", "2-s9": "absent",
+    "3-s0": "present", "3-s1": "present", "3-s2": "present", "3-s3": "present", "3-s4": "present", "3-s5": "present", "3-s6": "present", "3-s7": "present", "3-s8": "present", "3-s9": "present",
+    "4-s0": "present", "4-s1": "present", "4-s2": "late", "4-s3": "present", "4-s4": "present", "4-s5": "present", "4-s6": "present", "4-s7": "late", "4-s8": "present", "4-s9": "present",
+    "5-s0": "excused", "5-s1": "present", "5-s2": "present", "5-s3": "present", "5-s4": "present", "5-s5": "present", "5-s6": "present", "5-s7": "present", "5-s8": "present", "5-s9": "present",
+  })
+
+  // Tactical daily roll statuses
+  const [dailyStatuses, setDailyStatuses] = React.useState<
+    Record<number, "present" | "late" | "absent" | "excused">
+  >({
+    1: "present",
+    2: "late",
+    3: "absent",
+    4: "present",
+    5: "present",
+    6: "excused",
   })
 
   const cohortSlots = React.useMemo(
@@ -1352,6 +1578,22 @@ function Flow4ScheduleAndAttendance() {
     setNewSlotDay(null)
   }
 
+  const handleExecuteGenerateSessions = () => {
+    setGenerationExecuted(true)
+    setTimeout(() => {
+      setGenerateSessionsOpen(false)
+      setViewMode("dated-sessions")
+    }, 600)
+  }
+
+  const handleMarkAllDailyPresent = () => {
+    const updated: Record<number, "present"> = {}
+    DUMMY_STUDENTS.slice(0, 6).forEach((s) => {
+      updated[s.id] = "present"
+    })
+    setDailyStatuses(updated)
+  }
+
   return (
     <div className="space-y-4">
       <SystemHeader
@@ -1374,10 +1616,22 @@ function Flow4ScheduleAndAttendance() {
             label: "Dated Sessions",
             count: cohortSlots.flatMap((s) => s.upcomingDates).length,
           },
-          { id: "roll-matrix", label: "Roll Matrix" },
+          { id: "roll-matrix", label: "Attendance Workspace" },
         ]}
         activeTab={viewMode}
         onTabChange={setViewMode}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="gap-1.5 font-mono text-xs"
+              onClick={() => setGenerateSessionsOpen(true)}
+            >
+              <Sparkles className="size-3.5" />
+              + Generate Sessions
+            </Button>
+          </div>
+        }
       />
 
       {/* Inline CohortSwitcher Bar */}
@@ -1405,9 +1659,17 @@ function Flow4ScheduleAndAttendance() {
                 </span>
               </span>
             </div>
-            <span className="text-xs text-muted-foreground">
-              Flexible class hours across Mon–Sun · Click any slot to open the Slide-Over Inspector
-            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="xs"
+                variant="outline"
+                className="h-7 gap-1 font-mono text-[11px]"
+                onClick={() => setGenerateSessionsOpen(true)}
+              >
+                <Sparkles className="size-3" />
+                Generate Sessions
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -1629,67 +1891,271 @@ function Flow4ScheduleAndAttendance() {
         </DataModule>
       )}
 
+      {/* Attendance Workspace Dual-Mode: Daily Session Roll vs Monthly Matrix */}
       {viewMode === "roll-matrix" && (
-        <div className="overflow-hidden rounded-md border border-border bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2.5">
-            <span className="font-mono text-xs font-semibold text-foreground uppercase">
-              INTERACTIVE ROLL MATRIX · {selectedCohort}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Click any attendance cell dropdown to mark Present, Late, Absent, or Excused
-            </span>
+        <div className="space-y-3">
+          {/* Sub-mode Segmented Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-card p-2">
+            <div className="flex items-center gap-1 font-mono text-xs">
+              <button
+                type="button"
+                onClick={() => setAttendanceSubMode("daily")}
+                className={cn(
+                  "rounded-[2px] px-3 py-1 font-semibold transition-colors",
+                  attendanceSubMode === "daily"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                Daily Session Roll
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttendanceSubMode("matrix")}
+                className={cn(
+                  "rounded-[2px] px-3 py-1 font-semibold transition-colors",
+                  attendanceSubMode === "matrix"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                Monthly &amp; Subject Matrix
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-muted-foreground">
+                COHORT // <strong className="text-foreground">{selectedCohort}</strong>
+              </span>
+            </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow className="h-9 bg-muted/30 hover:bg-muted/30">
-                <TableHead className="px-3.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                  Student
-                </TableHead>
-                <TableHead className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                  Session 01 (Mon 09:00)
-                </TableHead>
-                <TableHead className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                  Session 02 (Wed 10:45)
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {DUMMY_STUDENTS.slice(0, 4).map((stu, idx) => {
-                const k0 = `${idx + 1}-0`
-                const k1 = `${idx + 1}-1`
-                const st0 = rollStatuses[k0] ?? "present"
-                const st1 = rollStatuses[k1] ?? "present"
-                return (
-                  <TableRow key={stu.id} className="h-11 hover:bg-muted/40">
-                    <TableCell className="px-3.5">
-                      <div className="flex items-center gap-2">
-                        <CodeChip accent>{stu.code}</CodeChip>
-                        <span className="text-[13px] font-medium text-foreground">
-                          {stu.name}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <RollStatusControl
-                        value={st0}
-                        onChange={(val) =>
-                          setRollStatuses((prev) => ({ ...prev, [k0]: val }))
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <RollStatusControl
-                        value={st1}
-                        onChange={(val) =>
-                          setRollStatuses((prev) => ({ ...prev, [k1]: val }))
-                        }
-                      />
-                    </TableCell>
+
+          {attendanceSubMode === "daily" ? (
+            /* Mode 1: Daily Session Roll (Tactical List) */
+            <div className="overflow-hidden rounded-md border border-border bg-card">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2.5">
+                <div>
+                  <div className="font-mono text-xs font-semibold text-foreground uppercase">
+                    DAILY SESSION ROLL // MON 09:00 - 10:30 · MATHEMATICS · RM-201
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Daw Su Su · Enrolled Students in {selectedCohort}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="h-7 font-mono text-[11px]"
+                    onClick={handleMarkAllDailyPresent}
+                  >
+                    Mark All Present
+                  </Button>
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow className="h-9 bg-muted/30 hover:bg-muted/30">
+                    <TableHead className="px-3.5 font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Student Code
+                    </TableHead>
+                    <TableHead className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Student Name
+                    </TableHead>
+                    <TableHead className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Session Roll Status
+                    </TableHead>
+                    <TableHead className="font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Campus Gate
+                    </TableHead>
+                    <TableHead className="text-right font-mono text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Remarks
+                    </TableHead>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {DUMMY_STUDENTS.slice(0, 6).map((stu) => {
+                    const status = dailyStatuses[stu.id] ?? "present"
+                    return (
+                      <TableRow key={stu.id} className="h-11 hover:bg-muted/40">
+                        <TableCell className="px-3.5">
+                          <CodeChip accent>{stu.code}</CodeChip>
+                        </TableCell>
+                        <TableCell className="text-[13px] font-medium text-foreground">
+                          {stu.name}
+                        </TableCell>
+                        <TableCell>
+                          <RollStatusControl
+                            value={status}
+                            onChange={(val) =>
+                              setDailyStatuses((prev) => ({
+                                ...prev,
+                                [stu.id]: val,
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TelemetryTag
+                            status={stu.checkedInToday ? "present" : "absent"}
+                          >
+                            {stu.checkedInToday
+                              ? `ARRIVED (${stu.checkInTime})`
+                              : "NOT CHECKED IN"}
+                          </TelemetryTag>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                          Regular Session
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            /* Mode 2: Monthly & Subject Matrix (Sticky-Column Architecture) */
+            <div className="space-y-3">
+              {/* Matrix Command & Subject Filter Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-card p-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    SUBJECT:
+                  </span>
+                  {(["ALL", "MATHEMATICS", "PHYSICS", "CHEMISTRY"] as const).map(
+                    (sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => setMatrixSubjectFilter(sub)}
+                        className={cn(
+                          "rounded-[2px] border px-2.5 py-0.5 font-mono text-[11px] uppercase transition-colors",
+                          matrixSubjectFilter === sub
+                            ? "border-primary bg-primary text-primary-foreground font-semibold"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {sub}
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                  <span>SPAN: <strong>NOV 01 — NOV 30, 2026</strong></span>
+                  <span>·</span>
+                  <span>OCCURRENCES: <strong>{filteredMatrixOccurrences.length}</strong></span>
+                </div>
+              </div>
+
+              {/* Fixed-Height Native Scroll Container with Sticky Columns */}
+              <div className="relative max-h-[calc(100vh-310px)] min-h-[380px] w-full overflow-auto rounded-sm border border-border bg-card">
+                <table className="w-max min-w-full border-separate border-spacing-0 text-left text-xs">
+                  <thead className="sticky top-0 z-30 bg-muted/95 backdrop-blur-xs">
+                    <tr className="h-9">
+                      {/* Sticky Col 1 Header */}
+                      <th className="sticky top-0 left-0 z-30 w-[230px] border-b border-r border-border bg-muted/95 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-xs">
+                        STUDENT ({selectedCohort})
+                      </th>
+                      {/* Sticky Col 2 Header (Range Summary) */}
+                      <th className="sticky top-0 left-[230px] z-30 w-[150px] border-b border-r border-border bg-muted/95 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground shadow-[2px_0_4px_-1px_rgba(0,0,0,0.25)] backdrop-blur-xs">
+                        RANGE SUMMARY
+                      </th>
+                      {/* Occurrence Date Headers */}
+                      {filteredMatrixOccurrences.map((occ) => (
+                        <th
+                          key={occ.id}
+                          className="sticky top-0 z-20 w-[110px] border-b border-r border-border bg-muted/95 px-2 py-1 text-center font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-xs"
+                        >
+                          <div>{occ.date}</div>
+                          <div className="text-[9px] font-normal text-muted-foreground/80">
+                            {occ.time}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DUMMY_STUDENTS.slice(0, 6).map((stu, sIdx) => {
+                      // Calculate range rate breakdown
+                      let pCount = 0
+                      let lCount = 0
+                      let aCount = 0
+                      filteredMatrixOccurrences.forEach((occ) => {
+                        const st = matrixStatuses[`${sIdx}-${occ.id}`] ?? "present"
+                        if (st === "present") pCount++
+                        else if (st === "late") lCount++
+                        else if (st === "absent") aCount++
+                      })
+                      const totalOcc = filteredMatrixOccurrences.length || 1
+                      const pct = Math.round(((pCount + lCount * 0.5) / totalOcc) * 100)
+
+                      return (
+                        <tr
+                          key={stu.id}
+                          className="group h-11 hover:bg-muted/40"
+                        >
+                          {/* Sticky Col 1 Td (Student) */}
+                          <td className="sticky left-0 z-20 w-[230px] border-b border-r border-border bg-card px-3 py-2 transition-colors group-hover:bg-muted">
+                            <div className="flex items-center gap-2">
+                              <CodeChip accent>{stu.code}</CodeChip>
+                              <span className="truncate font-medium text-foreground">
+                                {stu.name}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Sticky Col 2 Td (Range Summary) */}
+                          <td className="sticky left-[230px] z-20 w-[150px] border-b border-r border-border bg-card px-3 py-2 font-mono text-xs tabular-nums text-foreground shadow-[2px_0_4px_-1px_rgba(0,0,0,0.25)] transition-colors group-hover:bg-muted">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "font-bold",
+                                  pct >= 90
+                                    ? "text-success"
+                                    : pct >= 75
+                                      ? "text-warning"
+                                      : "text-destructive"
+                                )}
+                              >
+                                {pct}%
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                ({pCount}P {lCount}L {aCount}A)
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Occurrence Cell Tds */}
+                          {filteredMatrixOccurrences.map((occ) => {
+                            const cellKey = `${sIdx}-${occ.id}`
+                            const status = matrixStatuses[cellKey] ?? "present"
+                            return (
+                              <td
+                                key={occ.id}
+                                className="w-[110px] border-b border-r border-border px-2 py-1 text-center"
+                              >
+                                <RollStatusControl
+                                  value={status}
+                                  onChange={(val) =>
+                                    setMatrixStatuses((prev) => ({
+                                      ...prev,
+                                      [cellKey]: val,
+                                    }))
+                                  }
+                                />
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1775,7 +2241,7 @@ function Flow4ScheduleAndAttendance() {
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
-                Occurrences & Substitute
+                Occurrences &amp; Substitute
               </button>
               <button
                 type="button"
@@ -1816,7 +2282,7 @@ function Flow4ScheduleAndAttendance() {
 
                 <div className="space-y-2">
                   <div className="font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    UPCOMING & RECENT DATED SESSIONS
+                    UPCOMING &amp; RECENT DATED SESSIONS
                   </div>
                   {inspectedSlot.upcomingDates.map((occ) => (
                     <div
@@ -1861,6 +2327,122 @@ function Flow4ScheduleAndAttendance() {
             )}
           </div>
         )}
+      </InspectorSheet>
+
+      {/* Generate Sessions Date-Range Confirmation Drawer */}
+      <InspectorSheet
+        open={generateSessionsOpen}
+        onOpenChange={setGenerateSessionsOpen}
+        code={`GEN // ${selectedCohort}`}
+        title={`Generate Sessions — ${selectedCohort}`}
+        subtitle="Materialize timetable slots into dated calendar session occurrences"
+        status={{ label: "SESSION MATERIALIZER", tone: "active" }}
+        fields={[
+          { label: "TARGET COHORT", value: selectedCohort, mono: true },
+          { label: "WEEKLY SLOTS", value: `${cohortSlots.length} slots/week`, mono: true },
+          { label: "TARGET SPAN", value: `${genStartDate} → ${genEndDate}`, mono: true },
+          { label: "PROJECTED SESSIONS", value: `${cohortSlots.length * 4} sessions`, mono: true },
+        ]}
+        footerActions={
+          <div className="flex w-full items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setGenerateSessionsOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={handleExecuteGenerateSessions}
+            >
+              <Sparkles className="size-3.5" />
+              {generationExecuted ? "Regenerate Sessions" : "Generate Sessions Now"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="block font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+              QUICK DATE PRESETS
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                type="button"
+                variant={genPreset === "month" ? "default" : "outline"}
+                size="xs"
+                className="h-7 font-mono text-[11px]"
+                onClick={() => {
+                  setGenPreset("month")
+                  setGenStartDate("2026-11-01")
+                  setGenEndDate("2026-11-30")
+                }}
+              >
+                This Month (Nov)
+              </Button>
+              <Button
+                type="button"
+                variant={genPreset === "30days" ? "default" : "outline"}
+                size="xs"
+                className="h-7 font-mono text-[11px]"
+                onClick={() => {
+                  setGenPreset("30days")
+                  setGenStartDate("2026-11-04")
+                  setGenEndDate("2026-12-04")
+                }}
+              >
+                Next 30 Days
+              </Button>
+              <Button
+                type="button"
+                variant={genPreset === "term" ? "default" : "outline"}
+                size="xs"
+                className="h-7 font-mono text-[11px]"
+                onClick={() => {
+                  setGenPreset("term")
+                  setGenStartDate("2026-11-01")
+                  setGenEndDate("2027-01-31")
+                }}
+              >
+                Full Term (90d)
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="font-mono text-[10px] font-semibold uppercase text-muted-foreground">
+                START DATE
+              </label>
+              <Input
+                type="date"
+                value={genStartDate}
+                onChange={(e) => setGenStartDate(e.target.value)}
+                className="h-8 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-mono text-[10px] font-semibold uppercase text-muted-foreground">
+                END DATE
+              </label>
+              <Input
+                type="date"
+                value={genEndDate}
+                onChange={(e) => setGenEndDate(e.target.value)}
+                className="h-8 font-mono text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+            <div className="font-semibold text-foreground">Materialization Preview:</div>
+            <p className="mt-1">
+              Iterates through every active weekly slot for <strong>{selectedCohort}</strong> and generates dated attendance session rows between {genStartDate} and {genEndDate}. Existing completed roll records are safely preserved without data loss.
+            </p>
+          </div>
+        </div>
       </InspectorSheet>
 
       {/* Slide-Over Add New Timetable Slot Drawer */}
