@@ -82,6 +82,10 @@ export const DUMMY_COHORTS: DummyCohort[] = [
   },
 ]
 
+export const DUMMY_COHORTS_NO_IAL: DummyCohort[] = DUMMY_COHORTS.filter(
+  (c) => c.level !== "IAL"
+)
+
 export interface DummySubject {
   id: number
   code: string
